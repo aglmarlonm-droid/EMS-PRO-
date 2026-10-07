@@ -201,7 +201,7 @@ acts.xlsx = async () => { if (!need()) return; toast('Preparing Excel file…');
     const head = (ws, r, labels) => { const row = ws.getRow(r); labels.forEach((l, i) => { const c = row.getCell(i + 1); c.value = l; c.font = { name: 'Calibri', bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = fill(HEAD); c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; c.border = bd; }); row.height = 26; };
     const COND = { GOOD: ['FFDFF5E8', 'FF1B7F4B'], FAIR: ['FFECEFF3', 'FF4A5560'], DAMAGED: ['FFFBE0E0', 'FFB42318'], FAULTY: ['FFFBE0E0', 'FFB42318'] };
     // Sheet 1: history
-    const ws = wb.addWorksheet('History', { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+    const ws = wb.addWorksheet('Equipment History', { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
     const H = ['#', 'Equipment ID', 'Equipment Name', 'Category', 'Person', 'Signed Out', 'Returned', 'Duration', 'Condition Out', 'Condition In', 'Condition Note', 'Signed Out By', 'Returned By', 'Status'], W = [6, 16, 28, 18, 24, 18, 18, 12, 14, 14, 30, 16, 16, 12];
     W.forEach((w, i) => ws.getColumn(i + 1).width = w);
     banner(ws, H.length, 'EQUIPMENT HISTORY REPORT', `Generated ${stamp} (SAST) by ${S.user.name} · ${rows.length} record${rows.length === 1 ? '' : 's'}${q ? ` · filter: "${S.hq}"` : ''}`);
