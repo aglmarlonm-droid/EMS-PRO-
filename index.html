@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Equipment Management</title><meta name="theme-color" content="#12181f">
+<style>
+:root{--bg:#12181f;--p:#1b242e;--p2:#243140;--t:#eef2f5;--m:#8fa0b0;--a:#ffb400;--AVAILABLE:#2bd67b;--OUT:#4da3ff;--OVERDUE:#ff4d4d;--MAINTENANCE:#c084fc;--LOST:#ff8a3d;--INACTIVE:#7a8794}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:16px/1.4 Bahnschrift,"Segoe UI",system-ui,sans-serif;padding-top:env(safe-area-inset-top)}
+header{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--p);border-bottom:3px solid var(--a);position:sticky;top:0;z-index:5}
+.logo{width:18px;height:18px;background:var(--a);border-radius:4px}h1{font-size:17px;letter-spacing:.06em;margin:0;flex:1}h2{margin:.2em 0 .6em;font-size:22px}
+main{max-width:720px;margin:auto;padding:14px 14px 100px}
+#off{background:var(--OVERDUE);color:#fff;text-align:center;padding:8px;font-weight:700}
+.lnk{background:none;border:0;color:var(--a);font:inherit;min-height:44px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.stat{background:var(--p);border-radius:14px;padding:14px;border-left:6px solid var(--c)}.stat b{display:block;font-size:34px;line-height:1}.stat span{color:var(--m);font-size:13px}
+.card{background:var(--p);border-radius:14px;padding:14px;margin-bottom:10px;border-left:6px solid var(--INACTIVE);display:flex;gap:10px;justify-content:space-between;align-items:center}
+.card.AVAILABLE{border-color:var(--AVAILABLE)}.card.OUT{border-color:var(--OUT)}.card.OVERDUE{border-color:var(--OVERDUE)}.card.MAINTENANCE{border-color:var(--MAINTENANCE)}.card.LOST{border-color:var(--LOST)}
+.panel{background:var(--p);border-radius:14px;padding:14px;margin-bottom:12px;display:block}
+.m{color:var(--m);font-size:14px}.warn{color:#ff8080;font-weight:700;margin:6px 0}
+.b{font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--INACTIVE);color:#0b0f14;margin-left:6px}
+.b.AVAILABLE{background:var(--AVAILABLE)}.b.OUT{background:var(--OUT)}.b.OVERDUE{background:var(--OVERDUE);color:#fff}.b.MAINTENANCE{background:var(--MAINTENANCE)}.b.LOST{background:var(--LOST)}
+.btn{display:block;width:100%;min-height:56px;margin:8px 0;border:0;border-radius:12px;background:var(--a);color:#12181f;font:700 17px inherit;font-family:inherit;letter-spacing:.04em}
+.btn.ghost{background:var(--p2);color:var(--t)}.btn.big{min-height:120px;font-size:22px}.btn:disabled{opacity:.4}.btn.sm{width:auto;min-height:44px;padding:0 14px;margin:0;font-size:14px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+input,select,textarea{width:100%;min-height:48px;margin:4px 0 10px;padding:10px 12px;border-radius:10px;border:1px solid #33465a;background:#0f151b;color:var(--t);font:inherit}
+label{font-size:13px;color:var(--m)}.tabs{display:flex;gap:8px;margin-bottom:12px}.tabs button{flex:1;min-height:48px;border:0;border-radius:10px;background:var(--p2);color:var(--t);font:inherit}.tabs .on{background:var(--a);color:#12181f;font-weight:700}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px}.kv dt{color:var(--m)}.kv dd{margin:0;font-weight:700}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--p);border-top:1px solid #33465a;padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav button{flex:1;min-height:60px;background:none;border:0;color:var(--m);font:12px inherit;font-family:inherit}nav button b{display:block;font-size:20px}nav .on{color:var(--a)}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#fff;color:#12181f;padding:12px 18px;border-radius:12px;font-weight:700;display:none;z-index:9;max-width:90%}
+@media(min-width:900px){.grid{grid-template-columns:repeat(4,1fr)}}
+
+.b.GOOD{background:var(--AVAILABLE)}.b.FAIR{background:var(--a)}.b.DAMAGED,.b.FAULTY{background:var(--OVERDUE);color:#fff}.b.ADMIN{background:var(--a)}.b.CONTROLLER{background:var(--OUT)}
+</style></head>
+<body>
+<div id="off" hidden>OFFLINE: sign-out and return are disabled until you reconnect</div>
+<header><span class="logo"></span><h1>EQUIPMENT MANAGEMENT</h1><button id="out" class="lnk" hidden>Log out</button></header>
+<main id="app"></main><nav id="nav"></nav><div id="toast"></div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, onSnapshot, query, orderBy, limit, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBF4_foqVrVt5VQMINPZ2uO77W-Ks89MqA",
+  authDomain: "ems-pro-b9491.firebaseapp.com",
+  projectId: "ems-pro-b9491",
+  storageBucket: "ems-pro-b9491.firebasestorage.app",
+  messagingSenderId: "1036651703540",
+  appId: "1:1036651703540:web:209a4e22a2941f4413c2a1"
+};
+const db = getFirestore(initializeApp(firebaseConfig));
+
+// ---------- inline PWA manifest ----------
+(() => {
+  const svg = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#12181f"/><rect x="120" y="120" width="272" height="272" rx="40" fill="#ffb400"/><rect x="226" y="205" width="60" height="100" fill="#12181f"/></svg>');
+  const m = { name: "Equipment Management", short_name: "Equipment", start_url: location.href.split('#')[0], display: "standalone", background_color: "#12181f", theme_color: "#12181f", icons: [{ src: svg, sizes: "any", type: "image/svg+xml", purpose: "any maskable" }] };
+  const l = document.createElement('link'); l.rel = 'manifest'; l.href = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' })); document.head.appendChild(l);
+})();
+
+// ---------- NFC ----------
+const nfcSupported = 'NDEFReader' in window;
+async function scanNfc(onTag, signal) {
+  const r = new NDEFReader(); await r.scan({ signal });
+  r.onreadingerror = () => onTag(null);
+  r.onreading = ev => { let text = null; for (const x of ev.message.records) if (x.recordType === 'text' || x.recordType === 'url') { text = new TextDecoder(x.encoding || 'utf-8').decode(x.data); break; } onTag({ uid: (ev.serialNumber || '').toUpperCase(), text }); };
+}
+
+// ---------- helpers ----------
+const $ = s => document.querySelector(s), A = $('#app');
+const TZ = 'Africa/Johannesburg', CATS = ['Handheld Radio', 'Extension Cable', 'Generator', 'Tool', 'Safety Equipment', 'Other'], PRESET = { 'Handheld Radio': 12, 'Extension Cable': 24, 'Generator': 48 }, CONDS = ['GOOD', 'FAIR', 'DAMAGED', 'FAULTY'];
+const S = { user: null, view: 'home', eq: [], acc: [], tx: null, sel: null, pend: null, scanning: false, tab: 'eq', edit: null, q: '', hq: '', un: [] };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = t => t?.toDate ? new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(t.toDate()) : '—';
+const dur = ms => { const m = Math.floor(Math.max(0, ms) / 6e4); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
+const tms = e => e.timeOut?.toMillis?.() ?? Date.now();
+const over = e => e.status === 'OUT' && e.expectedHours > 0 && Date.now() - tms(e) > e.expectedHours * 36e5;
+const st = e => !e.active ? 'INACTIVE' : over(e) ? 'OVERDUE' : e.status;
+const badge = s => `<span class="b ${s}">${s}</span>`;
+const val = id => (document.getElementById(id)?.value ?? '').trim();
+const toast = m => { const t = $('#toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = 'none', 4000); };
+const need = () => navigator.onLine || (toast('OFFLINE: reconnect to continue.'), false);
+const staff = () => ['ADMIN', 'CONTROLLER'].includes(S.user?.role);
+const ls = { get: () => { try { return JSON.parse(localStorage.getItem('eqm')); } catch { return null; } }, set: v => { try { v ? localStorage.setItem('eqm', JSON.stringify(v)) : localStorage.removeItem('eqm'); } catch { } } };
+const hex = b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+const salt = () => hex(crypto.getRandomValues(new Uint8Array(8)));
+const hash = async (p, s) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s + p)));
+const log = (action, x = {}) => addDoc(collection(db, 'auditLogs'), { userId: S.user.username, userName: S.user.name, action, equipmentId: x.equipmentId || null, details: x.details || null, timestamp: serverTimestamp() }).catch(console.error);
+
+const card = (e, act = 'open') => { const s = st(e);
+  return `<div class="card ${s}" data-act="${act}" data-id="${esc(e.id)}"><div><b>${esc(e.equipmentId)}</b>${badge(s)}${badge(e.condition || 'GOOD')}<div class="m">${esc(e.name)} · ${esc(e.category)}</div>
+  ${e.status === 'OUT' ? `<div class="m">In use by <b>${esc(e.issuedToName)}</b> · out ${fmt(e.timeOut)} · ${dur(Date.now() - tms(e))}</div>` : ''}
+  ${s === 'OVERDUE' ? `<div class="warn">⚠ OVERDUE by ${dur(Date.now() - tms(e) - e.expectedHours * 36e5)} (allowed ${e.expectedHours}h)</div>` : ''}
+  ${e.conditionNote && e.condition !== 'GOOD' ? `<div class="m">Note: ${esc(e.conditionNote)}</div>` : ''}</div></div>`; };
+const rank = e => { const s = st(e); return s === 'OVERDUE' ? 0 : s === 'OUT' ? 1 : 2; };
+const lst = () => S.eq.filter(e => !S.q || [e.equipmentId, e.name, e.serialNumber, e.nfcUid, e.issuedToName, e.category].some(v => String(v ?? '').toLowerCase().includes(S.q.toLowerCase()))).sort((a, b) => rank(a) - rank(b)).map(e => card(e)).join('') || '<p class="m">No equipment found.</p>';
+
+// ---------- views ----------
+const V = {
+  login: () => `<h2>Sign in</h2><div class="panel"><label>Username</label><input id="un" autocapitalize="none" autocomplete="username"><label>Password</label><input id="pw" type="password" autocomplete="current-password"><button class="btn" data-act="login">LOGIN</button></div>
+    <button class="btn ghost" data-act="viewer">VIEW DASHBOARD (NO LOGIN)</button>`,
+  home() { const a = S.eq.filter(e => e.active), c = k => a.filter(e => st(e) === k).length;
+    return `<div class="grid"><div class="stat" style="--c:var(--AVAILABLE)"><b>${c('AVAILABLE')}</b><span>AVAILABLE</span></div><div class="stat" style="--c:var(--OUT)"><b>${a.filter(e => e.status === 'OUT').length}</b><span>IN USE</span></div>
+    <div class="stat" style="--c:var(--OVERDUE)"><b>${c('OVERDUE')}</b><span>OVERDUE</span></div><div class="stat" style="--c:var(--a)"><b>${a.length}</b><span>TOTAL</span></div></div>
+    ${staff() ? '<button class="btn big" data-act="go" data-v="scan">SCAN EQUIPMENT</button>' : ''}<input id="sq" type="search" placeholder="Search ID, name, serial, person" value="${esc(S.q)}"><div id="lst">${lst()}</div>`; },
+  scan: () => `<h2>SCAN NFC TAG</h2><p class="m">Hold your phone near the equipment NFC tag.</p>${nfcSupported ? '' : '<p class="warn">NFC scanning is not supported on this device/browser.</p>'}
+    <button class="btn big" data-act="nfc" ${nfcSupported ? '' : 'disabled'}>${S.scanning ? 'WAITING FOR TAG…' : 'SCAN NFC'}</button>
+    <div class="panel"><label>ENTER EQUIPMENT ID</label><input id="eid" placeholder="RADIO-001" autocapitalize="characters"><button class="btn ghost" data-act="find">FIND EQUIPMENT</button></div>`,
+  item() { const e = S.eq.find(x => x.id === S.sel); if (!e) return V.home(); const s = st(e), p = S.pend; let a = '';
+    if (staff()) {
+      if (s === 'AVAILABLE') a = p ? `<div class="panel"><dl class="kv"><dt>EQUIPMENT</dt><dd>${esc(e.name)}</dd><dt>PERSON</dt><dd>${esc(p.name)}</dd><dt>ACTION</dt><dd>SIGN OUT</dd><dt>TIME</dt><dd>Set by server</dd></dl></div><div class="row"><button class="btn ghost" data-act="cancel">CANCEL</button><button class="btn" data-act="doSign">CONFIRM SIGN OUT</button></div>`
+        : `<div class="panel"><label>PERSON TAKING EQUIPMENT</label><input id="pname" placeholder="Full name" autocomplete="off"><button class="btn" data-act="review">SIGN OUT</button></div>`;
+      else if (e.status === 'OUT' && e.active) a = p ? `<div class="panel"><dl class="kv"><dt>EQUIPMENT</dt><dd>${esc(e.name)}</dd><dt>FROM</dt><dd>${esc(e.issuedToName)}</dd><dt>CONDITION</dt><dd>${p.cond}</dd>${p.note ? `<dt>NOTE</dt><dd>${esc(p.note)}</dd>` : ''}</dl></div><div class="row"><button class="btn ghost" data-act="cancel">CANCEL</button><button class="btn" data-act="doReturn">CONFIRM RETURN</button></div>`
+        : `<div class="panel"><label>CONDITION OF EQUIPMENT</label><select id="cond">${CONDS.map(c => `<option>${c}</option>`).join('')}</select><label>NOTE (optional)</label><input id="cnote" placeholder="e.g. cracked screen"><button class="btn" data-act="askReturn">RETURN EQUIPMENT</button></div>`;
+      else a = `<p class="warn">${s} equipment cannot be signed out.</p>`;
+    }
+    return `<h2>${esc(e.equipmentId)} ${badge(s)}</h2><div class="panel"><dl class="kv"><dt>Name</dt><dd>${esc(e.name)}</dd><dt>Category</dt><dd>${esc(e.category)}</dd><dt>Location</dt><dd>${esc(e.location)}</dd><dt>Condition</dt><dd>${badge(e.condition || 'GOOD')} ${esc(e.conditionNote)}</dd>
+    ${e.status === 'OUT' ? `<dt>In use by</dt><dd>${esc(e.issuedToName)}</dd><dt>Signed out</dt><dd>${fmt(e.timeOut)}</dd><dt>Duration</dt><dd>${dur(Date.now() - tms(e))}</dd>` : ''}
+    ${s === 'OVERDUE' ? `<dt>Overdue</dt><dd class="warn">⚠ ${dur(Date.now() - tms(e) - e.expectedHours * 36e5)}</dd>` : ''}</dl></div>${a}`; },
+  history() { if (!staff()) return V.home(); if (!S.tx) { loadTx(); return '<p class="m">Loading…</p>'; } return `<h2>History</h2><input id="hq" type="search" placeholder="Equipment or person" value="${esc(S.hq)}"><div id="txl">${txHTML()}</div>`; },
+  admin() { if (S.user?.role !== 'ADMIN') return V.home(); const t = S.tab;
+    return `<div class="tabs"><button class="${t === 'eq' ? 'on' : ''}" data-act="tab" data-t="eq">Equipment</button><button class="${t === 'acc' ? 'on' : ''}" data-act="tab" data-t="acc">Accounts</button></div>${t === 'eq' ? adminEq() : adminAcc()}`; }
+};
+const opt = (l, v) => l.map(c => `<option ${c === v ? 'selected' : ''}>${c}</option>`).join('');
+function adminEq() { const x = S.edit || {}, cat = x.category || '', custom = cat && !CATS.includes(cat);
+  return `<div class="panel"><h2>${x.equipmentId ? 'Edit' : 'Add'} equipment</h2><label>Equipment ID</label><input id="f_id" value="${esc(x.equipmentId)}" ${x.equipmentId ? 'readonly' : ''} placeholder="RADIO-001" autocapitalize="characters">
+  <label>Name</label><input id="f_name" value="${esc(x.name)}"><label>Category</label><select id="f_cat">${opt(CATS, cat)}<option value="__c" ${custom ? 'selected' : ''}>Custom…</option></select><input id="f_ccat" placeholder="Custom category" value="${custom ? esc(cat) : ''}">
+  <label>Serial number</label><input id="f_ser" value="${esc(x.serialNumber)}"><label>NFC UID</label><input id="f_nfc" value="${esc(x.nfcUid)}" placeholder="04:A7:23:…"><button class="btn ghost" data-act="regScan" ${nfcSupported ? '' : 'disabled'}>SCAN NFC TAG</button>
+  <label>Location</label><input id="f_loc" value="${esc(x.location || 'Equipment Store')}"><label>Expected return (hours, blank = category default)</label><input id="f_hrs" type="number" min="0" value="${x.expectedHours || ''}">
+  <label>Condition</label><select id="f_cond">${opt(CONDS, x.condition || 'GOOD')}</select><label>Status</label><select id="f_stat" ${x.status === 'OUT' ? 'disabled' : ''}>${opt(['AVAILABLE', 'MAINTENANCE', 'LOST'], x.status)}${x.status === 'OUT' ? '<option selected>OUT</option>' : ''}</select>
+  <label><input type="checkbox" id="f_act" style="width:auto;min-height:0" ${x.active === false ? '' : 'checked'}> Active</label><button class="btn" data-act="saveEq">SAVE EQUIPMENT</button>${x.equipmentId ? '<button class="btn ghost" data-act="newEq">NEW</button>' : ''}</div>${S.eq.map(e => card(e, 'editEq')).join('')}`; }
+function adminAcc() { const x = S.edit || {};
+  return `<div class="panel"><h2>${x.username ? 'Edit account' : 'New account'}</h2><label>Username</label><input id="a_user" value="${esc(x.username)}" ${x.username ? 'readonly' : ''} autocapitalize="none"><label>Display name</label><input id="a_name" value="${esc(x.name)}">
+  <label>Role</label><select id="a_role">${opt(['CONTROLLER', 'ADMIN'], x.role)}</select><label>${x.username ? 'New password (leave blank to keep)' : 'Password'}</label><input id="a_pw" type="text" autocomplete="off">
+  <label><input type="checkbox" id="a_act" style="width:auto;min-height:0" ${x.active === false ? '' : 'checked'}> Active</label><button class="btn" data-act="saveAcc">SAVE ACCOUNT</button>${x.username ? '<button class="btn ghost" data-act="newAcc">NEW</button>' : ''}</div>
+  ${S.acc.map(a => `<div class="card ${a.active ? 'AVAILABLE' : 'INACTIVE'}" data-act="editAcc" data-id="${esc(a.username)}"><div><b>${esc(a.username)}</b> ${badge(a.role)}<div class="m">${esc(a.name)}${a.active ? '' : ' · INACTIVE'}</div></div></div>`).join('')}<p class="m">The Viewer needs no account.</p>`; }
+
+// ---------- history ----------
+const txHTML = () => { const q = S.hq.toLowerCase();
+  return (S.tx || []).filter(t => !q || `${t.equipmentId} ${t.equipmentName} ${t.personName}`.toLowerCase().includes(q)).map(t => `<div class="card ${t.status === 'OUT' ? 'OUT' : 'AVAILABLE'}"><div><b>${esc(t.equipmentId)}</b> ${badge(t.status)}${t.conditionIn ? badge(t.conditionIn) : ''}
+  <div>${esc(t.personName)}</div><div class="m">OUT: ${fmt(t.timeOut)} · IN: ${fmt(t.timeIn)}</div><div class="m">Duration: ${dur((t.timeIn?.toMillis?.() ?? Date.now()) - (t.timeOut?.toMillis?.() ?? Date.now()))} · by ${esc(t.signedOutBy)}${t.returnedBy ? ' / ' + esc(t.returnedBy) : ''}</div>${t.conditionNote ? `<div class="m">Note: ${esc(t.conditionNote)}</div>` : ''}</div></div>`).join('') || '<p class="m">No transactions.</p>'; };
+async function loadTx() { try { S.tx = (await getDocs(query(collection(db, 'equipmentTransactions'), orderBy('createdAt', 'desc'), limit(300)))).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { S.tx = []; toast(e.message); } render(); }
+
+// ---------- transactions ----------
+async function signOutEq(e, name) { const eref = doc(db, 'equipment', e.id), tref = doc(collection(db, 'equipmentTransactions'));
+  await runTransaction(db, async t => { const d = (await t.get(eref)).data(); if (d.status !== 'AVAILABLE' || !d.active) throw Error('Equipment is no longer available');
+    t.set(tref, { transactionId: tref.id, equipmentId: d.equipmentId, equipmentName: d.name, category: d.category, personName: name, action: 'SIGN_OUT', timeOut: serverTimestamp(), timeIn: null, status: 'OUT', conditionOut: d.condition || 'GOOD', signedOutBy: S.user.username, createdAt: serverTimestamp() });
+    t.update(eref, { status: 'OUT', issuedToName: name, timeOut: serverTimestamp(), openTxId: tref.id, updatedAt: serverTimestamp() }); });
+  log('EQUIPMENT_SIGNED_OUT', { equipmentId: e.equipmentId, details: name }); }
+async function returnEq(e, cond, note) { const eref = doc(db, 'equipment', e.id);
+  await runTransaction(db, async t => { const d = (await t.get(eref)).data(); if (d.status !== 'OUT') throw Error('Equipment is not out');
+    if (d.openTxId) t.update(doc(db, 'equipmentTransactions', d.openTxId), { timeIn: serverTimestamp(), status: 'RETURNED', conditionIn: cond, conditionNote: note, returnedBy: S.user.username });
+    t.update(eref, { status: 'AVAILABLE', issuedToName: null, timeOut: null, openTxId: null, condition: cond, conditionNote: note, lastReturnedAt: serverTimestamp(), updatedAt: serverTimestamp() }); });
+  log('EQUIPMENT_RETURNED', { equipmentId: e.equipmentId, details: `${e.issuedToName} · ${cond}${note ? ' · ' + note : ''}` }); }
+const dup = (uid, id) => uid && S.eq.find(x => x.nfcUid === uid && x.id !== id);
+const dupMsg = d => alert(`NFC TAG ALREADY REGISTERED\nAssigned to ${d.equipmentId} · ${d.name}`);
+
+// ---------- actions ----------
+const go = v => { S.view = v; S.pend = null; S.edit = null; render(); };
+const acts = {
+  go: d => go(d.v), tab: d => { S.tab = d.t; S.edit = null; render(); }, cancel: () => { S.pend = null; render(); },
+  open: d => { S.sel = d.id; S.pend = null; S.view = 'item'; render(); },
+  login: async () => { try { const u = val('un').toLowerCase(), s = await getDoc(doc(db, 'accounts', u)); if (!s.exists()) return toast('Wrong username or password'); const a = s.data();
+    if (!a.active || await hash($('#pw').value, a.salt) !== a.hash) return toast('Wrong username or password'); setUser({ username: u, name: a.name, role: a.role }); log('USER_LOGIN'); } catch (e) { toast('Cannot reach database: ' + e.message); } },
+  viewer: () => setUser({ username: 'viewer', name: 'Viewer', role: 'VIEWER' }),
+  find: () => { const e = S.eq.find(x => x.id === val('eid').toUpperCase()); if (!e) return toast('No equipment with that ID'); acts.open({ id: e.id }); },
+  nfc: async () => { if (S.scanning) return; S.ctl = new AbortController(); S.scanning = true; render();
+    try { await scanNfc(tag => { if (!tag) return toast('Could not read tag'); S.ctl.abort(); S.scanning = false; const e = S.eq.find(x => tag.uid && x.nfcUid === tag.uid) || S.eq.find(x => tag.text && x.equipmentId === tag.text.trim().toUpperCase());
+      if (!e) { toast('Tag not registered to any equipment'); return render(); } acts.open({ id: e.id }); }, S.ctl.signal); } catch (e) { S.scanning = false; toast('NFC error: ' + e.message); render(); } },
+  review: () => { const n = val('pname'); if (n.length < 2) return toast('Enter the person\'s name'); S.pend = { name: n }; render(); },
+  doSign: async () => { if (!need()) return; try { await signOutEq(S.eq.find(x => x.id === S.sel), S.pend.name); toast('Signed out'); go('home'); } catch (x) { toast(x.message); } },
+  askReturn: () => { S.pend = { cond: val('cond'), note: val('cnote') }; render(); },
+  doReturn: async () => { if (!need()) return; try { await returnEq(S.eq.find(x => x.id === S.sel), S.pend.cond, S.pend.note); toast('Returned'); go('home'); } catch (x) { toast(x.message); } },
+  editEq: d => { S.edit = S.eq.find(x => x.id === d.id); render(); scrollTo(0, 0); }, newEq: () => { S.edit = null; render(); },
+  regScan: async () => { const c = new AbortController(); toast('Hold the NFC tag near the phone…');
+    try { await scanNfc(tag => { if (!tag?.uid) return; c.abort(); const d = dup(tag.uid, val('f_id').toUpperCase()); if (d) return dupMsg(d); $('#f_nfc').value = tag.uid; toast('Tag read. Save to register.'); }, c.signal); } catch (e) { toast('NFC error: ' + e.message); } },
+  saveEq: async () => { if (!need()) return; const id = val('f_id').toUpperCase(), nfc = val('f_nfc').toUpperCase(); if (!id || !val('f_name')) return toast('ID and name are required');
+    const d0 = dup(nfc, id); if (d0) return dupMsg(d0); const cat = val('f_cat') === '__c' ? val('f_ccat') : val('f_cat'), ex = S.eq.find(x => x.id === id);
+    const d = { equipmentId: id, name: val('f_name'), category: cat || 'Other', nfcUid: nfc, location: val('f_loc'), serialNumber: val('f_ser'), expectedHours: +val('f_hrs') || PRESET[cat] || 0, condition: val('f_cond'), active: $('#f_act').checked, updatedAt: serverTimestamp() };
+    if (!ex) Object.assign(d, { status: val('f_stat'), createdAt: serverTimestamp(), issuedToName: null, timeOut: null, openTxId: null, conditionNote: '' }); else if (ex.status !== 'OUT') d.status = val('f_stat');
+    try { await setDoc(doc(db, 'equipment', id), d, { merge: true }); log(ex ? 'EQUIPMENT_EDITED' : 'EQUIPMENT_CREATED', { equipmentId: id }); if (nfc && nfc !== ex?.nfcUid) log('NFC_REGISTERED', { equipmentId: id, details: nfc }); S.edit = null; toast(nfc ? 'Saved. NFC TAG REGISTERED ✓' : 'Saved'); render(); } catch (e) { toast(e.message); } },
+  editAcc: d => { S.edit = S.acc.find(x => x.username === d.id); render(); scrollTo(0, 0); }, newAcc: () => { S.edit = null; render(); },
+  saveAcc: async () => { if (!need()) return; const ex = S.edit, un = ex?.username || val('a_user').toLowerCase().replace(/[^a-z0-9_.-]/g, ''), pw = $('#a_pw').value.trim(), role = val('a_role'), act = $('#a_act').checked;
+    if (!un || !val('a_name')) return toast('Username and name are required'); if (!ex && S.acc.some(a => a.username === un)) return toast('Username already exists'); if ((!ex || pw) && pw.length < 4) return toast('Password must be at least 4 characters');
+    if (!(role === 'ADMIN' && act) && !S.acc.some(a => a.role === 'ADMIN' && a.active && a.username !== un)) return toast('Keep at least one active Admin');
+    const d = { username: un, name: val('a_name'), role, active: act }; if (pw) { d.salt = salt(); d.hash = await hash(pw, d.salt); } if (!ex) d.createdAt = serverTimestamp();
+    try { await setDoc(doc(db, 'accounts', un), d, { merge: true }); log(ex ? 'ACCOUNT_EDITED' : 'ACCOUNT_CREATED', { details: un + (pw ? ' (password changed)' : '') }); S.edit = null; toast('Account saved'); render(); } catch (e) { toast(e.message); } }
+};
+document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) acts[b.dataset.act]?.(b.dataset); });
+document.addEventListener('input', e => { if (e.target.id === 'sq') { S.q = e.target.value; $('#lst').innerHTML = lst(); } if (e.target.id === 'hq') { S.hq = e.target.value; $('#txl').innerHTML = txHTML(); } });
+$('#out').onclick = () => { unsub(); S.user = null; S.eq = []; S.tx = null; ls.set(null); render(); };
+
+// ---------- session & render ----------
+function render() { const u = S.user; $('#out').hidden = !u; $('#out').textContent = u?.role === 'VIEWER' ? 'Staff login' : 'Log out';
+  const items = u ? [['home', '⌂', 'Home'], ...(staff() ? [['scan', '◉', 'Scan'], ['history', '≡', 'History']] : []), ...(u.role === 'ADMIN' ? [['admin', '⚙', 'Admin']] : [])] : [];
+  const n = $('#nav'); n.style.display = items.length > 1 ? 'flex' : 'none'; n.innerHTML = items.map(([v, i, t]) => `<button class="${S.view === v ? 'on' : ''}" data-act="go" data-v="${v}"><b>${i}</b>${t}</button>`).join('');
+  A.innerHTML = u ? (V[S.view] || V.home)() : V.login(); }
+const unsub = () => { S.un.forEach(f => f()); S.un = []; };
+function setUser(u) { unsub(); S.user = u; S.view = 'home'; ls.set(u);
+  S.un.push(onSnapshot(collection(db, 'equipment'), s => { S.eq = s.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })).sort((a, b) => a.equipmentId.localeCompare(b.equipmentId)); if (['home', 'item'].includes(S.view) && !S.pend && !document.activeElement?.matches('input,select')) render(); }, e => toast('Database error: ' + e.message)));
+  if (u.role === 'ADMIN') S.un.push(onSnapshot(collection(db, 'accounts'), s => { S.acc = s.docs.map(d => d.data()); }, e => toast(e.message)));
+  render(); }
+async function boot() { render();
+  try { const s = await getDocs(query(collection(db, 'accounts'), limit(1)));
+    if (s.empty) for (const [u, n, r, p] of [['admin', 'Administrator', 'ADMIN', 'admin123'], ['controller', 'Equipment Controller', 'CONTROLLER', 'controller123']]) { const sl = salt(); await setDoc(doc(db, 'accounts', u), { username: u, name: n, role: r, active: true, salt: sl, hash: await hash(p, sl), createdAt: serverTimestamp() }); } } catch (e) { toast('Cannot reach database. Create Firestore and publish the rules.'); }
+  const r = ls.get(); if (r?.role === 'VIEWER') setUser(r); else if (r?.username) { try { const a = (await getDoc(doc(db, 'accounts', r.username))).data(); if (a?.active) setUser({ username: r.username, name: a.name, role: a.role }); } catch { } } }
+setInterval(() => { if (S.user && S.view === 'home' && !document.activeElement?.matches('input')) render(); }, 30000);
+const net = () => $('#off').hidden = navigator.onLine; addEventListener('online', net); addEventListener('offline', net); net();
+boot();
+</script>
+</body></html>
