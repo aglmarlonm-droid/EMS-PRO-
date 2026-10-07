@@ -30,6 +30,9 @@ nav button{flex:1;min-height:60px;background:none;border:0;color:var(--m);font:1
 @media(min-width:900px){.grid{grid-template-columns:repeat(4,1fr)}}
 
 .b.GOOD{background:var(--AVAILABLE)}.b.FAIR{background:var(--a)}.b.DAMAGED,.b.FAULTY{background:var(--OVERDUE);color:#fff}.b.ADMIN{background:var(--a)}.b.CONTROLLER{background:var(--OUT)}
+.sec{margin:18px 0 8px;font-size:13px;letter-spacing:.12em;color:var(--m)}.cat{background:var(--p);border-radius:14px;padding:12px 14px;margin-bottom:10px}.ch{display:flex;justify-content:space-between;align-items:baseline}.ch span{color:var(--m);font-size:13px}
+.cs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}.cs div{background:var(--p2);border-radius:10px;padding:8px;border-top:3px solid var(--c);font-size:12px;color:var(--m)}.cs b{display:block;font-size:24px;color:var(--t)}
+.grp{display:flex;justify-content:space-between;align-items:baseline;margin:20px 2px 8px;padding-bottom:6px;border-bottom:2px solid var(--a);font-weight:700;letter-spacing:.08em;text-transform:uppercase}.grp span{color:var(--m);font-weight:400;font-size:13px;letter-spacing:0;text-transform:none}
 </style></head>
 <body>
 <div id="off" hidden>OFFLINE: sign-out and return are disabled until you reconnect</div>
@@ -66,13 +69,14 @@ async function scanNfc(onTag, signal) {
 
 // ---------- helpers ----------
 const $ = s => document.querySelector(s), A = $('#app');
-const TZ = 'Africa/Johannesburg', CATS = ['Handheld Radio', 'Extension Cable', 'Generator', 'Tool', 'Safety Equipment', 'Other'], PRESET = { 'Handheld Radio': 12, 'Extension Cable': 24, 'Generator': 48 }, CONDS = ['GOOD', 'FAIR', 'DAMAGED', 'FAULTY'];
+const TZ = 'Africa/Johannesburg', CATS = ['Handheld Radio', 'Extension Cable', 'Generator', 'Tool', 'Safety Equipment', 'Scanner', 'Tablet', 'Other'], PRESET = { 'Handheld Radio': 12, 'Extension Cable': 24, 'Generator': 48, 'Scanner': 12, 'Tablet': 12 }, CONDS = ['GOOD', 'FAIR', 'DAMAGED', 'FAULTY'];
 const S = { user: null, view: 'home', eq: [], acc: [], tx: null, sel: null, pend: null, scanning: false, tab: 'eq', edit: null, q: '', hq: '', un: [] };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = t => t?.toDate ? new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(t.toDate()) : '—';
 const dur = ms => { const m = Math.floor(Math.max(0, ms) / 6e4); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
 const tms = e => e.timeOut?.toMillis?.() ?? Date.now();
-const over = e => e.status === 'OUT' && e.expectedHours > 0 && Date.now() - tms(e) > e.expectedHours * 36e5;
+const hrs = e => e.dueHours > 0 ? e.dueHours : e.expectedHours;
+const over = e => e.status === 'OUT' && hrs(e) > 0 && Date.now() - tms(e) > hrs(e) * 36e5;
 const st = e => !e.active ? 'INACTIVE' : over(e) ? 'OVERDUE' : e.status;
 const badge = s => `<span class="b ${s}">${s}</span>`;
 const val = id => (document.getElementById(id)?.value ?? '').trim();
@@ -88,10 +92,14 @@ const log = (action, x = {}) => addDoc(collection(db, 'auditLogs'), { userId: S.
 const card = (e, act = 'open') => { const s = st(e);
   return `<div class="card ${s}" data-act="${act}" data-id="${esc(e.id)}"><div><b>${esc(e.equipmentId)}</b>${badge(s)}${badge(e.condition || 'GOOD')}<div class="m">${esc(e.name)} · ${esc(e.category)}</div>
   ${e.status === 'OUT' ? `<div class="m">In use by <b>${esc(e.issuedToName)}</b> · out ${fmt(e.timeOut)} · ${dur(Date.now() - tms(e))}</div>` : ''}
-  ${s === 'OVERDUE' ? `<div class="warn">⚠ OVERDUE by ${dur(Date.now() - tms(e) - e.expectedHours * 36e5)} (allowed ${e.expectedHours}h)</div>` : ''}
+  ${s === 'OVERDUE' ? `<div class="warn">⚠ OVERDUE by ${dur(Date.now() - tms(e) - hrs(e) * 36e5)} (allowed ${hrs(e)}h)</div>` : ''}
   ${e.conditionNote && e.condition !== 'GOOD' ? `<div class="m">Note: ${esc(e.conditionNote)}</div>` : ''}</div></div>`; };
 const rank = e => { const s = st(e); return s === 'OVERDUE' ? 0 : s === 'OUT' ? 1 : 2; };
-const lst = () => S.eq.filter(e => !S.q || [e.equipmentId, e.name, e.serialNumber, e.nfcUid, e.issuedToName, e.category].some(v => String(v ?? '').toLowerCase().includes(S.q.toLowerCase()))).sort((a, b) => rank(a) - rank(b)).map(e => card(e)).join('') || '<p class="m">No equipment found.</p>';
+const catCards = a => { const cs = [...new Set(a.map(e => e.category || 'Other'))].sort(); if (!cs.length) return '';
+  return '<div class="sec">BY CATEGORY</div>' + cs.map(c => { const l = a.filter(e => (e.category || 'Other') === c), k = x => l.filter(e => st(e) === x).length;
+    return `<div class="cat"><div class="ch"><b>${esc(c)}</b><span>${l.length} total</span></div><div class="cs"><div style="--c:var(--AVAILABLE)"><b>${k('AVAILABLE')}</b>Available</div><div style="--c:var(--OUT)"><b>${l.filter(e => e.status === 'OUT').length}</b>In use</div><div style="--c:var(--OVERDUE)"><b>${k('OVERDUE')}</b>Overdue</div></div></div>`; }).join('') + '<div class="sec">ALL EQUIPMENT</div>'; };
+const lst = () => { const l = S.eq.filter(e => !S.q || [e.equipmentId, e.name, e.serialNumber, e.nfcUid, e.issuedToName, e.category].some(v => String(v ?? '').toLowerCase().includes(S.q.toLowerCase()))); if (!l.length) return '<p class="m">No equipment found.</p>';
+  const g = {}; l.forEach(e => (g[e.category || 'Other'] ||= []).push(e)); return Object.keys(g).sort().map(c => `<div class="grp">${esc(c)}<span>${g[c].filter(e => e.status === 'OUT').length} in use / ${g[c].length}</span></div>` + g[c].sort((a, b) => rank(a) - rank(b)).map(e => card(e)).join('')).join(''); };
 
 // ---------- views ----------
 const V = {
@@ -100,21 +108,21 @@ const V = {
   home() { const a = S.eq.filter(e => e.active), c = k => a.filter(e => st(e) === k).length;
     return `<div class="grid"><div class="stat" style="--c:var(--AVAILABLE)"><b>${c('AVAILABLE')}</b><span>AVAILABLE</span></div><div class="stat" style="--c:var(--OUT)"><b>${a.filter(e => e.status === 'OUT').length}</b><span>IN USE</span></div>
     <div class="stat" style="--c:var(--OVERDUE)"><b>${c('OVERDUE')}</b><span>OVERDUE</span></div><div class="stat" style="--c:var(--a)"><b>${a.length}</b><span>TOTAL</span></div></div>
-    ${staff() ? '<button class="btn big" data-act="go" data-v="scan">SCAN EQUIPMENT</button>' : ''}<input id="sq" type="search" placeholder="Search ID, name, serial, person" value="${esc(S.q)}"><div id="lst">${lst()}</div>`; },
+    ${catCards(a)}${staff() ? '<button class="btn big" data-act="go" data-v="scan">SCAN EQUIPMENT</button>' : ''}<input id="sq" type="search" placeholder="Search ID, name, serial, person" value="${esc(S.q)}"><div id="lst">${lst()}</div>`; },
   scan: () => `<h2>SCAN NFC TAG</h2><p class="m">Hold your phone near the equipment NFC tag.</p>${nfcSupported ? '' : '<p class="warn">NFC scanning is not supported on this device/browser.</p>'}
     <button class="btn big" data-act="nfc" ${nfcSupported ? '' : 'disabled'}>${S.scanning ? 'WAITING FOR TAG…' : 'SCAN NFC'}</button>
     <div class="panel"><label>ENTER EQUIPMENT ID</label><input id="eid" placeholder="RADIO-001" autocapitalize="characters"><button class="btn ghost" data-act="find">FIND EQUIPMENT</button></div>`,
   item() { const e = S.eq.find(x => x.id === S.sel); if (!e) return V.home(); const s = st(e), p = S.pend; let a = '';
     if (staff()) {
-      if (s === 'AVAILABLE') a = p ? `<div class="panel"><dl class="kv"><dt>EQUIPMENT</dt><dd>${esc(e.name)}</dd><dt>PERSON</dt><dd>${esc(p.name)}</dd><dt>ACTION</dt><dd>SIGN OUT</dd><dt>TIME</dt><dd>Set by server</dd></dl></div><div class="row"><button class="btn ghost" data-act="cancel">CANCEL</button><button class="btn" data-act="doSign">CONFIRM SIGN OUT</button></div>`
-        : `<div class="panel"><label>PERSON TAKING EQUIPMENT</label><input id="pname" placeholder="Full name" autocomplete="off"><button class="btn" data-act="review">SIGN OUT</button></div>`;
+      if (s === 'AVAILABLE') a = p ? `<div class="panel"><dl class="kv"><dt>EQUIPMENT</dt><dd>${esc(e.name)}</dd><dt>PERSON</dt><dd>${esc(p.name)}</dd><dt>ACTION</dt><dd>SIGN OUT</dd><dt>DUE BACK AFTER</dt><dd>${p.hrs}h</dd><dt>TIME</dt><dd>Set by server</dd></dl></div><div class="row"><button class="btn ghost" data-act="cancel">CANCEL</button><button class="btn" data-act="doSign">CONFIRM SIGN OUT</button></div>`
+        : `<div class="panel"><label>PERSON TAKING EQUIPMENT</label><input id="pname" placeholder="Full name" autocomplete="off"><label>HOURS OUT (due back after)</label><input id="phrs" type="number" inputmode="decimal" min="0.5" step="0.5" value="${e.expectedHours || ''}" placeholder="e.g. 8"><button class="btn" data-act="review">SIGN OUT</button></div>`;
       else if (e.status === 'OUT' && e.active) a = p ? `<div class="panel"><dl class="kv"><dt>EQUIPMENT</dt><dd>${esc(e.name)}</dd><dt>FROM</dt><dd>${esc(e.issuedToName)}</dd><dt>CONDITION</dt><dd>${p.cond}</dd>${p.note ? `<dt>NOTE</dt><dd>${esc(p.note)}</dd>` : ''}</dl></div><div class="row"><button class="btn ghost" data-act="cancel">CANCEL</button><button class="btn" data-act="doReturn">CONFIRM RETURN</button></div>`
         : `<div class="panel"><label>CONDITION OF EQUIPMENT</label><select id="cond">${CONDS.map(c => `<option>${c}</option>`).join('')}</select><label>NOTE (optional)</label><input id="cnote" placeholder="e.g. cracked screen"><button class="btn" data-act="askReturn">RETURN EQUIPMENT</button></div>`;
       else a = `<p class="warn">${s} equipment cannot be signed out.</p>`;
     }
     return `<h2>${esc(e.equipmentId)} ${badge(s)}</h2><div class="panel"><dl class="kv"><dt>Name</dt><dd>${esc(e.name)}</dd><dt>Category</dt><dd>${esc(e.category)}</dd><dt>Location</dt><dd>${esc(e.location)}</dd><dt>Condition</dt><dd>${badge(e.condition || 'GOOD')} ${esc(e.conditionNote)}</dd>
     ${e.status === 'OUT' ? `<dt>In use by</dt><dd>${esc(e.issuedToName)}</dd><dt>Signed out</dt><dd>${fmt(e.timeOut)}</dd><dt>Duration</dt><dd>${dur(Date.now() - tms(e))}</dd>` : ''}
-    ${s === 'OVERDUE' ? `<dt>Overdue</dt><dd class="warn">⚠ ${dur(Date.now() - tms(e) - e.expectedHours * 36e5)}</dd>` : ''}</dl></div>${a}`; },
+    ${s === 'OVERDUE' ? `<dt>Overdue</dt><dd class="warn">⚠ ${dur(Date.now() - tms(e) - hrs(e) * 36e5)}</dd>` : ''}</dl></div>${a}`; },
   history() { if (!staff()) return V.home(); if (!S.tx) { loadTx(); return '<p class="m">Loading…</p>'; } return `<h2>History</h2><input id="hq" type="search" placeholder="Equipment or person" value="${esc(S.hq)}"><button class="btn" data-act="xlsx">EXPORT TO EXCEL</button><div id="txl">${txHTML()}</div>`; },
   admin() { if (S.user?.role !== 'ADMIN') return V.home(); const t = S.tab;
     return `<div class="tabs"><button class="${t === 'eq' ? 'on' : ''}" data-act="tab" data-t="eq">Equipment</button><button class="${t === 'acc' ? 'on' : ''}" data-act="tab" data-t="acc">Accounts</button></div>${t === 'eq' ? adminEq() : adminAcc()}`; }
@@ -124,7 +132,7 @@ function adminEq() { const x = S.edit || {}, cat = x.category || '', custom = ca
   return `<div class="panel"><h2>${x.equipmentId ? 'Edit' : 'Add'} equipment</h2><label>Equipment ID</label><input id="f_id" value="${esc(x.equipmentId)}" ${x.equipmentId ? 'readonly' : ''} placeholder="RADIO-001" autocapitalize="characters">
   <label>Name</label><input id="f_name" value="${esc(x.name)}"><label>Category</label><select id="f_cat">${opt(CATS, cat)}<option value="__c" ${custom ? 'selected' : ''}>Custom…</option></select><input id="f_ccat" placeholder="Custom category" value="${custom ? esc(cat) : ''}">
   <label>Serial number</label><input id="f_ser" value="${esc(x.serialNumber)}"><label>NFC UID</label><input id="f_nfc" value="${esc(x.nfcUid)}" placeholder="04:A7:23:…"><button class="btn ghost" data-act="regScan" ${nfcSupported ? '' : 'disabled'}>SCAN NFC TAG</button>
-  <label>Location</label><input id="f_loc" value="${esc(x.location || 'Equipment Store')}"><label>Expected return (hours, blank = category default)</label><input id="f_hrs" type="number" min="0" value="${x.expectedHours || ''}">
+  <label>Location</label><input id="f_loc" value="${esc(x.location || 'Equipment Store')}"><label>Default hours out (suggested at sign-out)</label><input id="f_hrs" type="number" min="0" value="${x.expectedHours || ''}">
   <label>Condition</label><select id="f_cond">${opt(CONDS, x.condition || 'GOOD')}</select><label>Status</label><select id="f_stat" ${x.status === 'OUT' ? 'disabled' : ''}>${opt(['AVAILABLE', 'MAINTENANCE', 'LOST'], x.status)}${x.status === 'OUT' ? '<option selected>OUT</option>' : ''}</select>
   <label><input type="checkbox" id="f_act" style="width:auto;min-height:0" ${x.active === false ? '' : 'checked'}> Active</label><button class="btn" data-act="saveEq">SAVE EQUIPMENT</button>${x.equipmentId ? '<button class="btn ghost" data-act="newEq">NEW</button>' : ''}</div>${S.eq.map(e => card(e, 'editEq')).join('')}`; }
 function adminAcc() { const x = S.edit || {};
@@ -134,21 +142,22 @@ function adminAcc() { const x = S.edit || {};
   ${S.acc.map(a => `<div class="card ${a.active ? 'AVAILABLE' : 'INACTIVE'}" data-act="editAcc" data-id="${esc(a.username)}"><div><b>${esc(a.username)}</b> ${badge(a.role)}<div class="m">${esc(a.name)}${a.active ? '' : ' · INACTIVE'}</div></div></div>`).join('')}<p class="m">The Viewer needs no account.</p>`; }
 
 // ---------- history ----------
-const txHTML = () => { const q = S.hq.toLowerCase();
-  return (S.tx || []).filter(t => !q || `${t.equipmentId} ${t.equipmentName} ${t.personName}`.toLowerCase().includes(q)).map(t => `<div class="card ${t.status === 'OUT' ? 'OUT' : 'AVAILABLE'}"><div><b>${esc(t.equipmentId)}</b> ${badge(t.status)}${t.conditionIn ? badge(t.conditionIn) : ''}
-  <div>${esc(t.personName)}</div><div class="m">OUT: ${fmt(t.timeOut)} · IN: ${fmt(t.timeIn)}</div><div class="m">Duration: ${dur((t.timeIn?.toMillis?.() ?? Date.now()) - (t.timeOut?.toMillis?.() ?? Date.now()))} · by ${esc(t.signedOutBy)}${t.returnedBy ? ' / ' + esc(t.returnedBy) : ''}</div>${t.conditionNote ? `<div class="m">Note: ${esc(t.conditionNote)}</div>` : ''}</div></div>`).join('') || '<p class="m">No transactions.</p>'; };
+const txCard = t => `<div class="card ${t.status === 'OUT' ? 'OUT' : 'AVAILABLE'}"><div><b>${esc(t.equipmentId)}</b> ${badge(t.status)}${t.conditionIn ? badge(t.conditionIn) : ''}
+  <div>${esc(t.personName)}</div><div class="m">OUT: ${fmt(t.timeOut)} · IN: ${fmt(t.timeIn)}</div><div class="m">Duration: ${dur((t.timeIn?.toMillis?.() ?? Date.now()) - (t.timeOut?.toMillis?.() ?? Date.now()))}${t.expectedHours ? ' of ' + t.expectedHours + 'h allowed' : ''} · by ${esc(t.signedOutBy)}${t.returnedBy ? ' / ' + esc(t.returnedBy) : ''}</div>${t.conditionNote ? `<div class="m">Note: ${esc(t.conditionNote)}</div>` : ''}</div></div>`;
+const txHTML = () => { const q = S.hq.toLowerCase(), l = (S.tx || []).filter(t => !q || `${t.equipmentId} ${t.equipmentName} ${t.personName} ${t.category}`.toLowerCase().includes(q)); if (!l.length) return '<p class="m">No transactions.</p>';
+  const g = {}; l.forEach(t => (g[t.category || 'Other'] ||= []).push(t)); return Object.keys(g).sort().map(c => `<div class="grp">${esc(c)}<span>${g[c].length} record${g[c].length === 1 ? '' : 's'}</span></div>` + g[c].map(txCard).join('')).join(''); };
 async function loadTx() { try { S.tx = (await getDocs(query(collection(db, 'equipmentTransactions'), orderBy('createdAt', 'desc'), limit(300)))).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { S.tx = []; toast(e.message); } render(); }
 
 // ---------- transactions ----------
-async function signOutEq(e, name) { const eref = doc(db, 'equipment', e.id), tref = doc(collection(db, 'equipmentTransactions'));
+async function signOutEq(e, name, h) { const eref = doc(db, 'equipment', e.id), tref = doc(collection(db, 'equipmentTransactions'));
   await runTransaction(db, async t => { const d = (await t.get(eref)).data(); if (d.status !== 'AVAILABLE' || !d.active) throw Error('Equipment is no longer available');
-    t.set(tref, { transactionId: tref.id, equipmentId: d.equipmentId, equipmentName: d.name, category: d.category, personName: name, action: 'SIGN_OUT', timeOut: serverTimestamp(), timeIn: null, status: 'OUT', conditionOut: d.condition || 'GOOD', signedOutBy: S.user.username, createdAt: serverTimestamp() });
-    t.update(eref, { status: 'OUT', issuedToName: name, timeOut: serverTimestamp(), openTxId: tref.id, updatedAt: serverTimestamp() }); });
+    t.set(tref, { transactionId: tref.id, equipmentId: d.equipmentId, equipmentName: d.name, category: d.category, personName: name, expectedHours: h, action: 'SIGN_OUT', timeOut: serverTimestamp(), timeIn: null, status: 'OUT', conditionOut: d.condition || 'GOOD', signedOutBy: S.user.username, createdAt: serverTimestamp() });
+    t.update(eref, { status: 'OUT', issuedToName: name, dueHours: h, timeOut: serverTimestamp(), openTxId: tref.id, updatedAt: serverTimestamp() }); });
   log('EQUIPMENT_SIGNED_OUT', { equipmentId: e.equipmentId, details: name }); }
 async function returnEq(e, cond, note) { const eref = doc(db, 'equipment', e.id);
   await runTransaction(db, async t => { const d = (await t.get(eref)).data(); if (d.status !== 'OUT') throw Error('Equipment is not out');
     if (d.openTxId) t.update(doc(db, 'equipmentTransactions', d.openTxId), { timeIn: serverTimestamp(), status: 'RETURNED', conditionIn: cond, conditionNote: note, returnedBy: S.user.username });
-    t.update(eref, { status: 'AVAILABLE', issuedToName: null, timeOut: null, openTxId: null, condition: cond, conditionNote: note, lastReturnedAt: serverTimestamp(), updatedAt: serverTimestamp() }); });
+    t.update(eref, { status: 'AVAILABLE', issuedToName: null, dueHours: null, timeOut: null, openTxId: null, condition: cond, conditionNote: note, lastReturnedAt: serverTimestamp(), updatedAt: serverTimestamp() }); });
   log('EQUIPMENT_RETURNED', { equipmentId: e.equipmentId, details: `${e.issuedToName} · ${cond}${note ? ' · ' + note : ''}` }); }
 const dup = (uid, id) => uid && S.eq.find(x => x.nfcUid === uid && x.id !== id);
 const dupMsg = d => alert(`NFC TAG ALREADY REGISTERED\nAssigned to ${d.equipmentId} · ${d.name}`);
@@ -165,8 +174,8 @@ const acts = {
   nfc: async () => { if (S.scanning) return; S.ctl = new AbortController(); S.scanning = true; render();
     try { await scanNfc(tag => { if (!tag) return toast('Could not read tag'); S.ctl.abort(); S.scanning = false; const e = S.eq.find(x => tag.uid && x.nfcUid === tag.uid) || S.eq.find(x => tag.text && x.equipmentId === tag.text.trim().toUpperCase());
       if (!e) { toast('Tag not registered to any equipment'); return render(); } acts.open({ id: e.id }); }, S.ctl.signal); } catch (e) { S.scanning = false; toast('NFC error: ' + e.message); render(); } },
-  review: () => { const n = val('pname'); if (n.length < 2) return toast('Enter the person\'s name'); S.pend = { name: n }; render(); },
-  doSign: async () => { if (!need()) return; try { await signOutEq(S.eq.find(x => x.id === S.sel), S.pend.name); toast('Signed out'); go('home'); } catch (x) { toast(x.message); } },
+  review: () => { const n = val('pname'), h = +val('phrs'); if (n.length < 2) return toast('Enter the person\'s name'); if (!(h > 0)) return toast('Enter how many hours it will be out'); S.pend = { name: n, hrs: h }; render(); },
+  doSign: async () => { if (!need()) return; try { await signOutEq(S.eq.find(x => x.id === S.sel), S.pend.name, S.pend.hrs); toast('Signed out'); go('home'); } catch (x) { toast(x.message); } },
   askReturn: () => { S.pend = { cond: val('cond'), note: val('cnote') }; render(); },
   doReturn: async () => { if (!need()) return; try { await returnEq(S.eq.find(x => x.id === S.sel), S.pend.cond, S.pend.note); toast('Returned'); go('home'); } catch (x) { toast(x.message); } },
   editEq: d => { S.edit = S.eq.find(x => x.id === d.id); render(); scrollTo(0, 0); }, newEq: () => { S.edit = null; render(); },
@@ -201,25 +210,27 @@ acts.xlsx = async () => { if (!need()) return; toast('Preparing Excel file…');
     const head = (ws, r, labels) => { const row = ws.getRow(r); labels.forEach((l, i) => { const c = row.getCell(i + 1); c.value = l; c.font = { name: 'Calibri', bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = fill(HEAD); c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; c.border = bd; }); row.height = 26; };
     const COND = { GOOD: ['FFDFF5E8', 'FF1B7F4B'], FAIR: ['FFECEFF3', 'FF4A5560'], DAMAGED: ['FFFBE0E0', 'FFB42318'], FAULTY: ['FFFBE0E0', 'FFB42318'] };
     // Sheet 1: history
-    const ws = wb.addWorksheet('Equipment History', { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
-    const H = ['#', 'Equipment ID', 'Equipment Name', 'Category', 'Person', 'Signed Out', 'Returned', 'Duration', 'Condition Out', 'Condition In', 'Condition Note', 'Signed Out By', 'Returned By', 'Status'], W = [6, 16, 28, 18, 24, 18, 18, 12, 14, 14, 30, 16, 16, 12];
+    const addHist = (sname, rows) => { const ws = wb.addWorksheet(sname, { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+    const H = ['#', 'Equipment ID', 'Equipment Name', 'Category', 'Person', 'Signed Out', 'Returned', 'Duration', 'Expected (h)', 'Condition Out', 'Condition In', 'Condition Note', 'Signed Out By', 'Returned By', 'Status'], W = [6, 16, 28, 18, 24, 18, 18, 12, 13, 14, 14, 30, 16, 16, 12];
     W.forEach((w, i) => ws.getColumn(i + 1).width = w);
     banner(ws, H.length, 'EQUIPMENT HISTORY REPORT', `Generated ${stamp} (SAST) by ${S.user.name} · ${rows.length} record${rows.length === 1 ? '' : 's'}${q ? ` · filter: "${S.hq}"` : ''}`);
     ws.getRow(3).height = 8; head(ws, 4, H);
     rows.forEach((t, i) => { const mins = t.timeIn?.toMillis && t.timeOut?.toMillis ? t.timeIn.toMillis() - t.timeOut.toMillis() : null;
-      const r = ws.addRow([i + 1, t.equipmentId, t.equipmentName, t.category, t.personName, fmtFull(t.timeOut), t.timeIn ? fmtFull(t.timeIn) : 'Not returned', mins === null ? 'In use' : dur(mins), t.conditionOut || 'GOOD', t.conditionIn || '', t.conditionNote || '', t.signedOutBy || '', t.returnedBy || '', t.status === 'OUT' ? 'OUT' : 'RETURNED']);
-      r.height = 22; r.eachCell({ includeEmpty: true }, (c, n) => { c.border = bd; c.font = { name: 'Calibri', size: 11 }; c.alignment = { vertical: 'middle', horizontal: [1, 6, 7, 8, 9, 10, 14].includes(n) ? 'center' : 'left', wrapText: n === 11 }; if (i % 2) c.fill = fill('FFF4F6F8'); });
-      [9, 10].forEach(n => { const c = r.getCell(n), m = COND[c.value]; if (m) { c.fill = fill(m[0]); c.font = { name: 'Calibri', bold: true, color: { argb: m[1] } }; } });
-      const sc = r.getCell(14); sc.font = { name: 'Calibri', bold: true, color: { argb: t.status === 'OUT' ? 'FF1D5FB4' : 'FF1B7F4B' } }; sc.fill = fill(t.status === 'OUT' ? 'FFDCEBFF' : 'FFDFF5E8'); if (t.status === 'OUT') r.getCell(7).font = { name: 'Calibri', italic: true, color: { argb: 'FF1D5FB4' } }; });
-    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + Math.max(rows.length, 1), column: H.length } };
-    // Sheet 2: summary by equipment
-    const by = {}; rows.forEach(t => { const k = t.equipmentId, o = by[k] ||= { name: t.equipmentName, n: 0, ms: 0, done: 0, bad: 0 }; o.n++; if (t.timeIn?.toMillis) { o.done++; o.ms += t.timeIn.toMillis() - t.timeOut.toMillis(); } if (['DAMAGED', 'FAULTY'].includes(t.conditionIn)) o.bad++; });
+      const r = ws.addRow([i + 1, t.equipmentId, t.equipmentName, t.category, t.personName, fmtFull(t.timeOut), t.timeIn ? fmtFull(t.timeIn) : 'Not returned', mins === null ? 'In use' : dur(mins), t.expectedHours || '', t.conditionOut || 'GOOD', t.conditionIn || '', t.conditionNote || '', t.signedOutBy || '', t.returnedBy || '', t.status === 'OUT' ? 'OUT' : 'RETURNED']);
+      r.height = 22; r.eachCell({ includeEmpty: true }, (c, n) => { c.border = bd; c.font = { name: 'Calibri', size: 11 }; c.alignment = { vertical: 'middle', horizontal: [1, 6, 7, 8, 9, 10, 11, 15].includes(n) ? 'center' : 'left', wrapText: n === 12 }; if (i % 2) c.fill = fill('FFF4F6F8'); });
+      [10, 11].forEach(n => { const c = r.getCell(n), m = COND[c.value]; if (m) { c.fill = fill(m[0]); c.font = { name: 'Calibri', bold: true, color: { argb: m[1] } }; } });
+      const sc = r.getCell(15); sc.font = { name: 'Calibri', bold: true, color: { argb: t.status === 'OUT' ? 'FF1D5FB4' : 'FF1B7F4B' } }; sc.fill = fill(t.status === 'OUT' ? 'FFDCEBFF' : 'FFDFF5E8'); if (t.status === 'OUT') r.getCell(7).font = { name: 'Calibri', italic: true, color: { argb: 'FF1D5FB4' } }; });
+    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + Math.max(rows.length, 1), column: H.length } }; };
+    rows.sort((a, b) => (a.category || 'Other').localeCompare(b.category || 'Other')); addHist('All Records', rows);
+    [...new Set(rows.map(t => t.category || 'Other'))].sort().forEach(c => addHist(c.replace(/[\\/?*\[\]:]/g, '').slice(0, 31), rows.filter(t => (t.category || 'Other') === c)));
+    // Summary grouped by category
+    const by = {}; rows.forEach(t => { const k = t.equipmentId, o = by[k] ||= { cat: t.category || 'Other', name: t.equipmentName, n: 0, ms: 0, done: 0, bad: 0 }; o.n++; if (t.timeIn?.toMillis) { o.done++; o.ms += t.timeIn.toMillis() - t.timeOut.toMillis(); } if (['DAMAGED', 'FAULTY'].includes(t.conditionIn)) o.bad++; });
     const s2 = wb.addWorksheet('Summary', { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
-    [16, 30, 14, 18, 18].forEach((w, i) => s2.getColumn(i + 1).width = w);
-    banner(s2, 5, 'SUMMARY BY EQUIPMENT', `Generated ${stamp} (SAST) · ${Object.keys(by).length} items · ${rows.filter(t => t.status === 'OUT').length} currently out`); s2.getRow(3).height = 8;
-    head(s2, 4, ['Equipment ID', 'Name', 'Times Issued', 'Avg Duration', 'Damaged / Faulty Returns']);
-    Object.entries(by).sort((a, b) => b[1].n - a[1].n).forEach(([k, o], i) => { const r = s2.addRow([k, o.name, o.n, o.done ? dur(o.ms / o.done) : '—', o.bad]); r.height = 22;
-      r.eachCell(c => { c.border = bd; c.font = { name: 'Calibri', size: 11 }; c.alignment = { vertical: 'middle', horizontal: c.col > 2 ? 'center' : 'left' }; if (i % 2) c.fill = fill('FFF4F6F8'); }); if (o.bad) r.getCell(5).font = { name: 'Calibri', bold: true, color: { argb: 'FFB42318' } }; });
+    [18, 16, 30, 14, 18, 20].forEach((w, i) => s2.getColumn(i + 1).width = w);
+    banner(s2, 6, 'SUMMARY BY CATEGORY AND EQUIPMENT', `Generated ${stamp} (SAST) · ${Object.keys(by).length} items · ${rows.filter(t => t.status === 'OUT').length} currently out`); s2.getRow(3).height = 8;
+    head(s2, 4, ['Category', 'Equipment ID', 'Name', 'Times Issued', 'Avg Duration', 'Damaged / Faulty Returns']);
+    Object.entries(by).sort((a, b) => a[1].cat.localeCompare(b[1].cat) || b[1].n - a[1].n).forEach(([k, o], i, arr) => { const r = s2.addRow([o.cat, k, o.name, o.n, o.done ? dur(o.ms / o.done) : '—', o.bad]); r.height = 22; const first = i === 0 || arr[i - 1][1].cat !== o.cat;
+      r.eachCell(c => { c.border = first ? { ...bd, top: { style: 'medium', color: { argb: DARK } } } : bd; c.font = { name: 'Calibri', size: 11 }; c.alignment = { vertical: 'middle', horizontal: c.col > 3 ? 'center' : 'left' }; if (i % 2) c.fill = fill('FFF4F6F8'); }); r.getCell(1).font = { name: 'Calibri', bold: true }; if (o.bad) r.getCell(6).font = { name: 'Calibri', bold: true, color: { argb: 'FFB42318' } }; });
     const buf = await wb.xlsx.writeBuffer(), a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     a.download = `equipment-history-${new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date())}.xlsx`; a.click(); log('HISTORY_EXPORTED', { details: `${rows.length} records` }); toast('Excel file downloaded');
   } catch (e) { toast(e.message); } };
