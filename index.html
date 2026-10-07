@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Equipment Management</title><meta name="theme-color" content="#12181f">
 <style>
-:root{--bg:#12181f;--p:#1b242e;--p2:#243140;--t:#eef2f5;--m:#8fa0b0;--a:#ffb400;--AVAILABLE:#2bd67b;--OUT:#4da3ff;--OVERDUE:#ff4d4d;--MAINTENANCE:#c084fc;--LOST:#ff8a3d;--INACTIVE:#7a8794}
+:root{--bg:#12181f;--p:#1b242e;--p2:#243140;--t:#eef2f5;--m:#8fa0b0;--a:#c4cad2;--AVAILABLE:#2bd67b;--OUT:#4da3ff;--OVERDUE:#ff4d4d;--MAINTENANCE:#c084fc;--LOST:#ff8a3d;--INACTIVE:#7a8794}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:16px/1.4 Bahnschrift,"Segoe UI",system-ui,sans-serif;padding-top:env(safe-area-inset-top)}
 header{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--p);border-bottom:3px solid var(--a);position:sticky;top:0;z-index:5}
 .logo{width:18px;height:18px;background:var(--a);border-radius:4px}h1{font-size:17px;letter-spacing:.06em;margin:0;flex:1}h2{margin:.2em 0 .6em;font-size:22px}
@@ -51,7 +51,7 @@ const db = getFirestore(initializeApp(firebaseConfig));
 
 // ---------- inline PWA manifest ----------
 (() => {
-  const svg = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#12181f"/><rect x="120" y="120" width="272" height="272" rx="40" fill="#ffb400"/><rect x="226" y="205" width="60" height="100" fill="#12181f"/></svg>');
+  const svg = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#12181f"/><rect x="120" y="120" width="272" height="272" rx="40" fill="#c4cad2"/><rect x="226" y="205" width="60" height="100" fill="#12181f"/></svg>');
   const m = { name: "Equipment Management", short_name: "Equipment", start_url: location.href.split('#')[0], display: "standalone", background_color: "#12181f", theme_color: "#12181f", icons: [{ src: svg, sizes: "any", type: "image/svg+xml", purpose: "any maskable" }] };
   const l = document.createElement('link'); l.rel = 'manifest'; l.href = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' })); document.head.appendChild(l);
 })();
@@ -115,7 +115,7 @@ const V = {
     return `<h2>${esc(e.equipmentId)} ${badge(s)}</h2><div class="panel"><dl class="kv"><dt>Name</dt><dd>${esc(e.name)}</dd><dt>Category</dt><dd>${esc(e.category)}</dd><dt>Location</dt><dd>${esc(e.location)}</dd><dt>Condition</dt><dd>${badge(e.condition || 'GOOD')} ${esc(e.conditionNote)}</dd>
     ${e.status === 'OUT' ? `<dt>In use by</dt><dd>${esc(e.issuedToName)}</dd><dt>Signed out</dt><dd>${fmt(e.timeOut)}</dd><dt>Duration</dt><dd>${dur(Date.now() - tms(e))}</dd>` : ''}
     ${s === 'OVERDUE' ? `<dt>Overdue</dt><dd class="warn">⚠ ${dur(Date.now() - tms(e) - e.expectedHours * 36e5)}</dd>` : ''}</dl></div>${a}`; },
-  history() { if (!staff()) return V.home(); if (!S.tx) { loadTx(); return '<p class="m">Loading…</p>'; } return `<h2>History</h2><input id="hq" type="search" placeholder="Equipment or person" value="${esc(S.hq)}"><div id="txl">${txHTML()}</div>`; },
+  history() { if (!staff()) return V.home(); if (!S.tx) { loadTx(); return '<p class="m">Loading…</p>'; } return `<h2>History</h2><input id="hq" type="search" placeholder="Equipment or person" value="${esc(S.hq)}"><button class="btn" data-act="xlsx">EXPORT TO EXCEL</button><div id="txl">${txHTML()}</div>`; },
   admin() { if (S.user?.role !== 'ADMIN') return V.home(); const t = S.tab;
     return `<div class="tabs"><button class="${t === 'eq' ? 'on' : ''}" data-act="tab" data-t="eq">Equipment</button><button class="${t === 'acc' ? 'on' : ''}" data-act="tab" data-t="acc">Accounts</button></div>${t === 'eq' ? adminEq() : adminAcc()}`; }
 };
@@ -184,6 +184,45 @@ const acts = {
     const d = { username: un, name: val('a_name'), role, active: act }; if (pw) { d.salt = salt(); d.hash = await hash(pw, d.salt); } if (!ex) d.createdAt = serverTimestamp();
     try { await setDoc(doc(db, 'accounts', un), d, { merge: true }); log(ex ? 'ACCOUNT_EDITED' : 'ACCOUNT_CREATED', { details: un + (pw ? ' (password changed)' : '') }); S.edit = null; toast('Account saved'); render(); } catch (e) { toast(e.message); } }
 };
+
+// ---------- Excel export (ExcelJS loaded on demand) ----------
+const fmtFull = t => t?.toDate ? new Intl.DateTimeFormat('en-GB', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(t.toDate()).replace(',', '') : '';
+const loadXL = () => window.ExcelJS ? Promise.resolve() : new Promise((ok, no) => { const x = document.createElement('script'); x.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'; x.onload = ok; x.onerror = () => no(Error('Could not load Excel library. Check your internet.')); document.head.appendChild(x); });
+acts.xlsx = async () => { if (!need()) return; toast('Preparing Excel file…');
+  try { await loadXL();
+    const q = S.hq.toLowerCase(), snap = await getDocs(query(collection(db, 'equipmentTransactions'), orderBy('createdAt', 'desc'), limit(5000)));
+    const rows = snap.docs.map(d => d.data()).filter(t => !q || `${t.equipmentId} ${t.equipmentName} ${t.personName}`.toLowerCase().includes(q));
+    const wb = new ExcelJS.Workbook(); wb.creator = 'Equipment Management'; wb.created = new Date();
+    const DARK = 'FF12181F', HEAD = 'FF243140', SILVER = 'FFC4CAD2', thin = { style: 'thin', color: { argb: 'FFD0D5DB' } }, bd = { top: thin, left: thin, bottom: thin, right: thin };
+    const fill = c => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: c } });
+    const stamp = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23' }).format(new Date());
+    const banner = (ws, n, title, sub) => { ws.mergeCells(1, 1, 1, n); const a = ws.getCell(1, 1); a.value = title; a.font = { name: 'Calibri', size: 18, bold: true, color: { argb: SILVER } }; a.fill = fill(DARK); a.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }; ws.getRow(1).height = 36;
+      ws.mergeCells(2, 1, 2, n); const b = ws.getCell(2, 1); b.value = sub; b.font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF5B6773' } }; b.alignment = { indent: 1 }; ws.getRow(2).height = 20; };
+    const head = (ws, r, labels) => { const row = ws.getRow(r); labels.forEach((l, i) => { const c = row.getCell(i + 1); c.value = l; c.font = { name: 'Calibri', bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = fill(HEAD); c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; c.border = bd; }); row.height = 26; };
+    const COND = { GOOD: ['FFDFF5E8', 'FF1B7F4B'], FAIR: ['FFECEFF3', 'FF4A5560'], DAMAGED: ['FFFBE0E0', 'FFB42318'], FAULTY: ['FFFBE0E0', 'FFB42318'] };
+    // Sheet 1: history
+    const ws = wb.addWorksheet('History', { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+    const H = ['#', 'Equipment ID', 'Equipment Name', 'Category', 'Person', 'Signed Out', 'Returned', 'Duration', 'Condition Out', 'Condition In', 'Condition Note', 'Signed Out By', 'Returned By', 'Status'], W = [6, 16, 28, 18, 24, 18, 18, 12, 14, 14, 30, 16, 16, 12];
+    W.forEach((w, i) => ws.getColumn(i + 1).width = w);
+    banner(ws, H.length, 'EQUIPMENT HISTORY REPORT', `Generated ${stamp} (SAST) by ${S.user.name} · ${rows.length} record${rows.length === 1 ? '' : 's'}${q ? ` · filter: "${S.hq}"` : ''}`);
+    ws.getRow(3).height = 8; head(ws, 4, H);
+    rows.forEach((t, i) => { const mins = t.timeIn?.toMillis && t.timeOut?.toMillis ? t.timeIn.toMillis() - t.timeOut.toMillis() : null;
+      const r = ws.addRow([i + 1, t.equipmentId, t.equipmentName, t.category, t.personName, fmtFull(t.timeOut), t.timeIn ? fmtFull(t.timeIn) : 'Not returned', mins === null ? 'In use' : dur(mins), t.conditionOut || 'GOOD', t.conditionIn || '', t.conditionNote || '', t.signedOutBy || '', t.returnedBy || '', t.status === 'OUT' ? 'OUT' : 'RETURNED']);
+      r.height = 22; r.eachCell({ includeEmpty: true }, (c, n) => { c.border = bd; c.font = { name: 'Calibri', size: 11 }; c.alignment = { vertical: 'middle', horizontal: [1, 6, 7, 8, 9, 10, 14].includes(n) ? 'center' : 'left', wrapText: n === 11 }; if (i % 2) c.fill = fill('FFF4F6F8'); });
+      [9, 10].forEach(n => { const c = r.getCell(n), m = COND[c.value]; if (m) { c.fill = fill(m[0]); c.font = { name: 'Calibri', bold: true, color: { argb: m[1] } }; } });
+      const sc = r.getCell(14); sc.font = { name: 'Calibri', bold: true, color: { argb: t.status === 'OUT' ? 'FF1D5FB4' : 'FF1B7F4B' } }; sc.fill = fill(t.status === 'OUT' ? 'FFDCEBFF' : 'FFDFF5E8'); if (t.status === 'OUT') r.getCell(7).font = { name: 'Calibri', italic: true, color: { argb: 'FF1D5FB4' } }; });
+    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + Math.max(rows.length, 1), column: H.length } };
+    // Sheet 2: summary by equipment
+    const by = {}; rows.forEach(t => { const k = t.equipmentId, o = by[k] ||= { name: t.equipmentName, n: 0, ms: 0, done: 0, bad: 0 }; o.n++; if (t.timeIn?.toMillis) { o.done++; o.ms += t.timeIn.toMillis() - t.timeOut.toMillis(); } if (['DAMAGED', 'FAULTY'].includes(t.conditionIn)) o.bad++; });
+    const s2 = wb.addWorksheet('Summary', { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+    [16, 30, 14, 18, 18].forEach((w, i) => s2.getColumn(i + 1).width = w);
+    banner(s2, 5, 'SUMMARY BY EQUIPMENT', `Generated ${stamp} (SAST) · ${Object.keys(by).length} items · ${rows.filter(t => t.status === 'OUT').length} currently out`); s2.getRow(3).height = 8;
+    head(s2, 4, ['Equipment ID', 'Name', 'Times Issued', 'Avg Duration', 'Damaged / Faulty Returns']);
+    Object.entries(by).sort((a, b) => b[1].n - a[1].n).forEach(([k, o], i) => { const r = s2.addRow([k, o.name, o.n, o.done ? dur(o.ms / o.done) : '—', o.bad]); r.height = 22;
+      r.eachCell(c => { c.border = bd; c.font = { name: 'Calibri', size: 11 }; c.alignment = { vertical: 'middle', horizontal: c.col > 2 ? 'center' : 'left' }; if (i % 2) c.fill = fill('FFF4F6F8'); }); if (o.bad) r.getCell(5).font = { name: 'Calibri', bold: true, color: { argb: 'FFB42318' } }; });
+    const buf = await wb.xlsx.writeBuffer(), a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = `equipment-history-${new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date())}.xlsx`; a.click(); log('HISTORY_EXPORTED', { details: `${rows.length} records` }); toast('Excel file downloaded');
+  } catch (e) { toast(e.message); } };
 document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) acts[b.dataset.act]?.(b.dataset); });
 document.addEventListener('input', e => { if (e.target.id === 'sq') { S.q = e.target.value; $('#lst').innerHTML = lst(); } if (e.target.id === 'hq') { S.hq = e.target.value; $('#txl').innerHTML = txHTML(); } });
 $('#out').onclick = () => { unsub(); S.user = null; S.eq = []; S.tx = null; ls.set(null); render(); };
