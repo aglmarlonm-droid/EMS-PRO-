@@ -40,6 +40,8 @@ nav button{flex:1;min-height:60px;background:none;border:0;color:var(--m);font:1
 .b.CUSTOMER_ADMIN,.b.CONTROLLER,.b.VIEWER,.b.DATAX_ADMIN{background:var(--p2);color:var(--t);border:1px solid #4a5a6b}
 h1 small{display:block;font-size:10px;letter-spacing:.1em;color:var(--m);font-weight:400}.chip{font-size:12px;color:var(--a);border:1px solid var(--a);padding:2px 10px;border-radius:99px;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tabs button{font-size:14px;padding:0 4px}
+.brand{display:flex;align-items:center;gap:12px;margin:6px 0 16px}.brand img{max-height:64px;max-width:96px;object-fit:contain;background:#fff;border-radius:10px;padding:4px}.brand b{display:block;font-size:20px}.brand span{color:var(--m);font-size:12px}
+.tabs{flex-wrap:wrap}.tabs button{flex:1 1 30%}.chip{max-width:46vw}.chip img{height:20px;vertical-align:middle;margin-right:6px;border-radius:3px;background:#fff;padding:1px}
 </style></head>
 <body>
 <div id="off" hidden>OFFLINE: connectivity is required to sign equipment out or in</div>
@@ -82,7 +84,8 @@ const $ = s => document.querySelector(s), A = $('#app');
 const TZ = 'Africa/Johannesburg', CATS = ['Handheld Radio', 'Scanner', 'Tablet', 'Extension Cable', 'Generator', 'Tool', 'Safety Equipment', 'Charger', 'Battery', 'Testing Equipment', 'Other'];
 const PRESET = { 'Handheld Radio': 12, 'Scanner': 12, 'Tablet': 12, 'Extension Cable': 24, 'Generator': 48 }, CONDS = ['GOOD', 'FAIR', 'DAMAGED'];
 const PLANS = { TRIAL: [5, 25], STANDARD: [50, 500], PROFESSIONAL: [200, 2000], ENTERPRISE: [1000, 10000] };
-const S = { user: null, cid: null, cust: null, sub: {}, view: 'home', eq: [], emp: [], loc: [], users: [], tx: null, recent: [], sel: null, pend: null, scanning: false, tab: 'eq', edit: null, q: '', hq: '', xo: false, plat: null, cf: null, af: null, err: '', blocked: false, un: [] };
+const LINK = (new URLSearchParams(location.search).get('c') || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+const S = { user: null, cid: null, cust: null, sub: {}, view: 'home', eq: [], emp: [], loc: [], users: [], tx: null, recent: [], sel: null, pend: null, scanning: false, tab: 'eq', edit: null, q: '', hq: '', xo: false, plat: null, cf: null, af: null, err: '', blocked: false, un: [], brand: null, lb: null, lbDone: false, logoPrev: null };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = t => t?.toDate ? new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(t.toDate()) : '—';
 const dur = ms => { const m = Math.floor(Math.max(0, ms) / 6e4); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
@@ -118,7 +121,7 @@ const recentHTML = () => S.recent.length ? '<div class="sec">RECENT TRANSACTIONS
 
 // ---------- views ----------
 const V = {
-  login: () => `<h2>Sign in</h2>${S.err ? `<p class="warn">${esc(S.err)}</p>` : ''}<div class="panel"><label>Email</label><input id="em" type="email" autocomplete="username" autocapitalize="none"><label>Password</label><input id="pw" type="password" autocomplete="current-password"><button class="btn" data-act="login">LOGIN</button><button class="btn ghost" data-act="reset">FORGOT PASSWORD</button></div>`,
+  login: () => `${loginBrand()}<h2>Sign in</h2>${S.err ? `<p class="warn">${esc(S.err)}</p>` : ''}<div class="panel"><label>Email</label><input id="em" type="email" autocomplete="username" autocapitalize="none"><label>Password</label><input id="pw" type="password" autocomplete="current-password"><button class="btn" data-act="login">LOGIN</button><button class="btn ghost" data-act="reset">FORGOT PASSWORD</button></div>`,
   blocked: () => `<h2>Access suspended</h2><div class="panel"><p>The <b>${esc(S.cust?.name || 'organisation')}</b> account is <b>${esc(S.cust?.status || 'unavailable')}</b>. Your data is safe. Please contact dataX to restore access.</p></div>`,
   home() { const a = S.eq.filter(e => e.status !== 'RETIRED'), k = x => a.filter(e => st(e) === x).length, stat = (n, l, c) => `<div class="stat" style="--c:var(--${c})"><b>${n}</b><span>${l}</span></div>`;
     return `<div class="grid">${stat(a.length, 'TOTAL EQUIPMENT', 'a')}${stat(k('AVAILABLE'), 'AVAILABLE', 'AVAILABLE')}${stat(a.filter(e => e.status === 'ISSUED').length, 'ISSUED', 'OUT')}${stat(k('OVERDUE'), 'OUTSTANDING', 'OVERDUE')}${stat(k('MAINTENANCE'), 'MAINTENANCE', 'MAINTENANCE')}${stat(k('DAMAGED'), 'DAMAGED', 'LOST')}${stat(k('LOST'), 'LOST', 'LOST')}</div>
@@ -140,7 +143,7 @@ const V = {
     ${s === 'OVERDUE' ? `<dt>Overdue</dt><dd class="warn">⚠ ${dur(Date.now() - tms(e) - hrs(e) * 36e5)}</dd>` : ''}</dl></div>${a}`; },
   history() { if (!S.tx) { loadTx(); return '<p class="m">Loading…</p>'; }
     return `<h2>History</h2><input id="hq" type="search" placeholder="Equipment, category or employee" value="${esc(S.hq)}">${staff() ? (S.xo ? xpanel() : '<button class="btn" data-act="xlsxPanel">EXPORT TO EXCEL</button>') : ''}<div id="txl">${txHTML()}</div>`; },
-  admin() { if (!isCA()) return V.home(); const T = { eq: ['Equipment', adminEq], emp: ['Employees', adminEmp], loc: ['Locations', adminLoc], usr: ['Users', adminUsr] };
+  admin() { if (!isCA()) return V.home(); const T = { eq: ['Equipment', adminEq], emp: ['Employees', adminEmp], loc: ['Locations', adminLoc], usr: ['Users', adminUsr], brand: ['Branding', adminBrand] };
     return `<div class="tabs">${Object.entries(T).map(([k, [l]]) => `<button class="${S.tab === k ? 'on' : ''}" data-act="tab" data-t="${k}">${l}</button>`).join('')}</div>${T[S.tab][1]()}`; },
   platform() { if (!S.plat) { loadPlat(); return '<p class="m">Loading platform…</p>'; } const c = S.plat, sum = k => c.reduce((s, x) => s + (x[k] || 0), 0), n = s => c.filter(x => x.status === s).length, stat = (v, l, k) => `<div class="stat" style="--c:var(--${k})"><b>${v}</b><span>${l}</span></div>`;
     return `<h2>Platform overview</h2><div class="grid">${stat(c.length, 'CUSTOMERS', 'a')}${stat(n('ACTIVE') + n('TRIAL'), 'ACTIVE / TRIAL', 'AVAILABLE')}${stat(n('SUSPENDED') + n('EXPIRED'), 'SUSPENDED / EXPIRED', 'OVERDUE')}${stat(sum('users'), 'USERS', 'a')}${stat(sum('equip'), 'EQUIPMENT', 'a')}${stat(sum('issued'), 'ISSUED NOW', 'OUT')}${stat(sum('month'), 'TRANSACTIONS THIS MONTH', 'a')}</div>
@@ -172,7 +175,16 @@ const custForm = () => { const f = S.cf; return `<div class="panel"><h2>${f.cust
   <button class="btn" data-act="saveCust">SAVE CUSTOMER</button><button class="btn ghost" data-act="cancelCust">CANCEL</button></div>`; };
 const admForm = () => `<div class="panel"><h2>Add Customer Admin (${esc(S.af)})</h2><label>Name</label><input id="ad_name"><label>Email</label><input id="ad_email" type="email" autocapitalize="none"><label>Temporary password (min 6)</label><input id="ad_pw" type="text" autocomplete="off"><button class="btn" data-act="saveAdm">CREATE ADMIN</button><button class="btn ghost" data-act="cancelCust">CANCEL</button></div>`;
 const custCard = c => `<div class="card ${c.status}"><div><b>${esc(c.name)}</b> ${badge(c.status)}<div class="m">ID ${esc(c.customerId)} · Plan ${esc(c.sub.plan || c.plan)}</div><div class="m">Users ${c.users}/${c.sub.userLimit ?? '∞'} · Equipment ${c.equip}/${c.sub.equipmentLimit ?? '∞'} · Issued ${c.issued} · This month ${c.month}</div>
-  <div class="row" style="margin-top:8px"><button class="btn sm ghost" data-act="editCust" data-id="${esc(c.customerId)}">EDIT</button><button class="btn sm ghost" data-act="togCust" data-id="${esc(c.customerId)}">${c.status === 'SUSPENDED' ? 'ACTIVATE' : 'SUSPEND'}</button><button class="btn sm ghost" data-act="addAdm" data-id="${esc(c.customerId)}">ADD ADMIN</button></div></div></div>`;
+  <div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sm ghost" data-act="copyLink" data-id="${esc(c.customerId)}">COPY LINK</button><button class="btn sm ghost" data-act="editCust" data-id="${esc(c.customerId)}">EDIT</button><button class="btn sm ghost" data-act="togCust" data-id="${esc(c.customerId)}">${c.status === 'SUSPENDED' ? 'ACTIVATE' : 'SUSPEND'}</button><button class="btn sm ghost" data-act="addAdm" data-id="${esc(c.customerId)}">ADD ADMIN</button></div></div></div>`;
+
+// ---------- branding ----------
+async function toLogo(file) { const url = URL.createObjectURL(file); const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(Error('Could not read that image')); i.src = url; });
+  const r = Math.min(1, 256 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(img.width * r)); c.height = Math.max(1, Math.round(img.height * r)); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+  let d = c.toDataURL('image/png'); if (d.length > 200000) d = c.toDataURL('image/jpeg', .85); if (d.length > 300000) throw Error('Image is too complex. Use a simpler logo.'); return d; }
+const loginBrand = () => S.lb ? `<div class="brand">${S.lb.logo ? `<img src="${esc(S.lb.logo)}" alt="">` : ''}<div><b>${esc(S.lb.name)}</b><span>Powered by dataX</span></div></div>` : LINK && S.lbDone ? '<p class="warn">Company link not recognised.</p>' : '';
+function adminBrand() { const b = S.brand || {};
+  return `<div class="panel"><h2>Company logo</h2><p class="m">Shown on your login page and in the app header. dataX branding stays visible.</p>${b.logo ? `<div class="brand"><img src="${esc(b.logo)}" alt=""><div><b>${esc(S.cust?.name)}</b></div></div>` : '<p class="m">No logo uploaded yet.</p>'}
+  <label>Choose logo image (PNG, JPG or SVG)</label><input id="logo" type="file" accept="image/*"><div id="lprev"></div><button class="btn" data-act="saveLogo">SAVE LOGO</button>${b.logo ? '<button class="btn ghost" data-act="rmLogo">REMOVE LOGO</button>' : ''}</div>`; }
 
 // ---------- data loaders ----------
 const txCard = t => `<div class="card ${t.status}"><div><b>${esc(t.equipmentId)}</b> ${badge(t.status)}${t.conditionIn ? badge(t.conditionIn) : ''}<div>${esc(t.employeeName)}</div><div class="m">OUT: ${fmt(t.issuedAt)} · IN: ${fmt(t.returnedAt)}</div>
@@ -184,6 +196,7 @@ async function loadRecent() { try { S.recent = (await getDocs(query(col('equipme
 async function loadPlat() { try { const cs = (await getDocs(collection(db, 'customers'))).docs.map(d => d.data()), subs = Object.fromEntries((await getDocs(collection(db, 'subscriptions'))).docs.map(d => [d.id, d.data()])), m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
     const cnt = async q => (await getCountFromServer(q)).data().count;
     for (const c of cs) { const id = c.customerId; c.sub = subs[id] || {}; [c.users, c.equip, c.issued, c.month] = await Promise.all([cnt(query(collection(db, 'users'), where('customerId', '==', id))), cnt(collection(db, 'customers', id, 'equipment')), cnt(query(collection(db, 'customers', id, 'equipment'), where('status', '==', 'ISSUED'))), cnt(query(collection(db, 'customers', id, 'equipmentTransactions'), where('createdAt', '>=', m0)))]); }
+    const bs = new Set((await getDocs(collection(db, 'branding'))).docs.map(d => d.id)); for (const c of cs) if (!bs.has(c.customerId)) await setDoc(doc(db, 'branding', c.customerId), { customerId: c.customerId, name: c.name, logo: '', updatedAt: serverTimestamp() }).catch(() => { });
     S.plat = sorted(cs, 'name'); } catch (e) { toast(e.message); S.plat = []; } render(); }
 
 // ---------- transactions ----------
@@ -246,12 +259,16 @@ const acts = {
   delUser: () => run(async () => { const x = S.edit; if (!x) return; if (x.uid === S.user.uid) return toast('You cannot delete your own account'); if (x.role === 'CUSTOMER_ADMIN' && !S.users.some(u => u.uid !== x.uid && u.role === 'CUSTOMER_ADMIN' && u.active !== false)) return toast('Keep at least one active Customer Admin');
     if (!confirm(`Delete user ${x.name}? They will lose all access. Their history keeps their name.`)) return; await deleteDoc(doc(db, 'users', x.uid)); audit('USER_DELETED', { details: x.email }); S.edit = null; toast('User deleted'); render(); }),
   xlsxPanel: () => { S.xo = !S.xo; render(); },
+  copyLink: d => { const u = location.origin + location.pathname + '?c=' + d.id; (navigator.clipboard?.writeText(u) || Promise.reject()).then(() => toast('Link copied: ' + u)).catch(() => prompt('Copy this company link', u)); },
+  saveLogo: () => run(async () => { if (!S.brand) return toast('Branding is not enabled yet. Ask dataX to open your company in the platform console once.'); if (!S.logoPrev) return toast('Choose an image first');
+    await setDoc(doc(db, 'branding', S.cid), { logo: S.logoPrev, updatedAt: serverTimestamp() }, { merge: true }); S.brand = { ...S.brand, logo: S.logoPrev }; S.logoPrev = null; audit('LOGO_UPDATED'); toast('Logo saved'); render(); }),
+  rmLogo: () => run(async () => { if (!confirm('Remove the company logo?')) return; await setDoc(doc(db, 'branding', S.cid), { logo: '', updatedAt: serverTimestamp() }, { merge: true }); S.brand = { ...S.brand, logo: '' }; audit('LOGO_REMOVED'); toast('Logo removed'); render(); }),
   newCust: () => { S.cf = {}; S.af = null; render(); }, cancelCust: () => { S.cf = null; S.af = null; render(); },
   editCust: d => { S.cf = { ...S.plat.find(x => x.customerId === d.id) }; S.af = null; render(); scrollTo(0, 0); }, addAdm: d => { S.af = d.id; S.cf = null; render(); scrollTo(0, 0); },
   saveCust: () => run(async () => { const f = S.cf, id = (f.customerId || val('c_id')).toUpperCase().replace(/[^A-Z0-9_-]/g, ''), name = val('c_name'); if (!id || !name) return toast('Name and customer ID are required'); if (!f.customerId && S.plat.some(x => x.customerId === id)) return toast('Customer ID already exists');
     const plan = val('c_plan'), status = val('c_status'), ul = +val('c_ul') || PLANS[plan][0], el = +val('c_el') || PLANS[plan][1];
     await setDoc(doc(db, 'customers', id), { customerId: id, name, status, plan, updatedAt: serverTimestamp(), ...(f.customerId ? {} : { createdAt: serverTimestamp() }) }, { merge: true });
-    await setDoc(doc(db, 'subscriptions', id), { customerId: id, plan, status, userLimit: ul, equipmentLimit: el, updatedAt: serverTimestamp() }, { merge: true }); plog(f.customerId ? 'CUSTOMER_EDITED' : 'CUSTOMER_CREATED', id, `${name} · ${plan} · ${status}`); S.cf = null; S.plat = null; render(); }),
+    await setDoc(doc(db, 'subscriptions', id), { customerId: id, plan, status, userLimit: ul, equipmentLimit: el, updatedAt: serverTimestamp() }, { merge: true }); await setDoc(doc(db, 'branding', id), { customerId: id, name, updatedAt: serverTimestamp() }, { merge: true }); plog(f.customerId ? 'CUSTOMER_EDITED' : 'CUSTOMER_CREATED', id, `${name} · ${plan} · ${status}`); S.cf = null; S.plat = null; render(); }),
   togCust: d => run(async () => { const c = S.plat.find(x => x.customerId === d.id), ns = c.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED'; if (ns === 'SUSPENDED' && !confirm(`Suspend ${c.name}? Their users lose access; data is kept.`)) return;
     await setDoc(doc(db, 'customers', c.customerId), { status: ns, updatedAt: serverTimestamp() }, { merge: true }); await setDoc(doc(db, 'subscriptions', c.customerId), { status: ns }, { merge: true }); plog(ns === 'SUSPENDED' ? 'CUSTOMER_SUSPENDED' : 'CUSTOMER_ACTIVATED', c.customerId, c.name); S.plat = null; render(); }),
   saveAdm: () => run(async () => { const c = S.plat.find(x => x.customerId === S.af); await createUser(S.af, 'CUSTOMER_ADMIN', val('ad_name'), val('ad_email'), $('#ad_pw').value.trim(), c.users, c.sub.userLimit); plog('CUSTOMER_ADMIN_CREATED', S.af, val('ad_email')); S.af = null; S.plat = null; toast('Customer Admin created'); render(); })
@@ -308,10 +325,11 @@ acts.xlsx = async () => { if (!need()) return; toast('Preparing Excel file…');
 
 document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) acts[b.dataset.act]?.(b.dataset); });
 document.addEventListener('input', e => { if (e.target.id === 'sq') { S.q = e.target.value; $('#lst').innerHTML = lst(); } if (e.target.id === 'hq') { S.hq = e.target.value; $('#txl').innerHTML = txHTML(); } });
+document.addEventListener('change', async e => { if (e.target.id !== 'logo' || !e.target.files[0]) return; try { S.logoPrev = await toLogo(e.target.files[0]); $('#lprev').innerHTML = `<div class="brand"><img src="${S.logoPrev}" alt=""><div><span>Preview</span></div></div>`; } catch (x) { S.logoPrev = null; toast(x.message); } });
 $('#out').onclick = () => signOut(auth);
 
 // ---------- session & render ----------
-function render() { const u = S.user; $('#out').hidden = !u; $('#cust').textContent = u ? (isPlat() ? 'PLATFORM' : S.cust?.name || '') : ''; $('#cust').hidden = !u;
+function render() { const u = S.user; $('#out').hidden = !u; $('#cust').innerHTML = u ? (isPlat() ? 'PLATFORM' : (S.brand?.logo ? `<img src="${esc(S.brand.logo)}" alt="">` : '') + esc(S.cust?.name || '')) : ''; $('#cust').hidden = !u;
   const items = !u || S.blocked || isPlat() ? [] : [['home', '⌂', 'Home'], ...(staff() ? [['scan', '◉', 'Scan']] : []), ['history', '≡', 'History'], ...(isCA() ? [['admin', '⚙', 'Admin']] : [])];
   const n = $('#nav'); n.style.display = items.length > 1 ? 'flex' : 'none'; n.innerHTML = items.map(([v, i, t]) => `<button class="${S.view === v ? 'on' : ''}" data-act="go" data-v="${v}"><b>${i}</b>${t}</button>`).join('');
   A.innerHTML = !u ? V.login() : S.blocked ? V.blocked() : (V[S.view] || V.home)(); }
@@ -320,16 +338,18 @@ function start() { const on = (q, f) => S.un.push(onSnapshot(q, f, e => toast('D
   on(col('equipment'), s => { S.eq = sorted(s.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })), 'equipmentId'); if (['home', 'item'].includes(S.view) && !S.pend && !document.activeElement?.matches('input,select')) render(); });
   on(col('employees'), s => { S.emp = s.docs.map(d => ({ id: d.id, ...d.data() })); }); on(col('locations'), s => { S.loc = s.docs.map(d => ({ id: d.id, ...d.data() })); });
   if (isCA()) on(query(collection(db, 'users'), where('customerId', '==', S.cid)), s => { S.users = s.docs.map(d => d.data()); }); loadRecent(); }
-onAuthStateChanged(auth, async u => { unsub(); S.user = null; S.blocked = false; S.eq = []; S.tx = null; S.plat = null; if (!u) return render();
+onAuthStateChanged(auth, async u => { unsub(); S.user = null; S.brand = null; S.blocked = false; S.eq = []; S.tx = null; S.plat = null; if (!u) return render();
   let p; try { p = await getDoc(doc(db, 'users', u.uid)); } catch { p = null; }
   if (!p?.exists() || p.data().active === false) { S.err = 'This account is not set up or has been disabled. Contact your administrator.'; return signOut(auth); }
   S.user = { uid: u.uid, email: u.email, ...p.data() }; S.cid = S.user.customerId; S.view = isPlat() ? 'platform' : 'home';
+  if (LINK && !isPlat() && S.cid !== LINK) { S.err = 'This account does not belong to this company link.'; return signOut(auth); }
   if (!isPlat()) { try { S.cust = (await getDoc(doc(db, 'customers', S.cid))).data(); } catch { S.cust = null; }
     if (!['TRIAL', 'ACTIVE'].includes(S.cust?.status)) { S.blocked = true; return render(); }
-    S.sub = (await getDoc(doc(db, 'subscriptions', S.cid)).catch(() => null))?.data() || {}; start(); audit('USER_LOGIN'); } else plog('USER_LOGIN', 'DATAX', S.user.name);
+    S.sub = (await getDoc(doc(db, 'subscriptions', S.cid)).catch(() => null))?.data() || {}; S.brand = (await getDoc(doc(db, 'branding', S.cid)).catch(() => null))?.data() || null; start(); audit('USER_LOGIN'); } else plog('USER_LOGIN', 'DATAX', S.user.name);
   render(); });
 setInterval(() => { if (S.user && S.view === 'home' && !document.activeElement?.matches('input')) render(); }, 30000);
 const net = () => $('#off').hidden = navigator.onLine; addEventListener('online', net); addEventListener('offline', net); net();
+if (LINK) getDoc(doc(db, 'branding', LINK)).then(b => { S.lb = b.exists() ? b.data() : null; S.lbDone = true; if (!S.user) render(); }).catch(() => { S.lbDone = true; });
 render();
 
 </script>
