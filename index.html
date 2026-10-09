@@ -43,6 +43,19 @@ h1 small{display:block;font-size:10px;letter-spacing:.1em;color:var(--m);font-we
 .brand{display:flex;align-items:center;gap:12px;margin:6px 0 16px}.brand img{max-height:64px;max-width:96px;object-fit:contain;background:#fff;border-radius:10px;padding:4px}.brand b{display:block;font-size:20px}.brand span{color:var(--m);font-size:12px}
 .tabs{flex-wrap:wrap}.tabs button{flex:1 1 30%}.chip{max-width:46vw}.chip img{height:20px;vertical-align:middle;margin-right:6px;border-radius:3px;background:#fff;padding:1px}
 .logoimg img{height:34px;max-width:64px;object-fit:contain;background:#fff;border-radius:6px;padding:2px;display:block}h1{line-height:1.2}
+
+.dh{display:flex;justify-content:space-between;align-items:baseline;margin:2px 2px 10px}.dh b{font-size:20px}.dh span{color:var(--m);font-size:12px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}.kpi{background:var(--p);border-radius:14px;padding:12px 4px;text-align:center;border-top:4px solid var(--c)}.kpi b{display:block;font-size:30px;line-height:1.05}.kpi span{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--m)}
+.bar{display:flex;height:12px;border-radius:99px;overflow:hidden;background:var(--p2)}.bar i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 2px 14px;font-size:12px;color:var(--m)}.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.scanbtn{min-height:72px;font-size:19px;margin:6px 0 4px}
+.tbl{background:var(--p);border-radius:14px;overflow:hidden}.tr{display:grid;grid-template-columns:1fr 50px 50px 46px 46px;gap:4px;padding:11px 14px;border-top:1px solid var(--p2);align-items:center}.tr span:not(:first-child){text-align:center;font-variant-numeric:tabular-nums}
+.th{border-top:0;background:var(--p2);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--m)}.tt{font-weight:700;background:var(--p2)}.g{color:var(--AVAILABLE)}.bl{color:var(--OUT)}.rd{color:var(--OVERDUE);font-weight:700}
+.okbox{background:var(--p);border-radius:14px;padding:14px;color:var(--AVAILABLE);margin-bottom:10px}
+.msg{background:var(--p2);border-radius:12px;padding:10px 12px;margin:8px 0;white-space:pre-wrap}.msg.me{margin-left:22px}.msg.dx{margin-right:22px;border-left:3px solid var(--a)}.msg small{display:block;color:var(--m);font-size:11px;margin-bottom:3px}
+.card.OPEN{border-color:var(--OUT)}.card.IN_PROGRESS{border-color:var(--a)}.card.RESOLVED{border-color:var(--AVAILABLE)}.card.CLOSED{border-color:var(--INACTIVE)}
+.b.OPEN{background:var(--OUT)}.b.IN_PROGRESS{background:var(--a)}.b.RESOLVED{background:var(--AVAILABLE)}.b.CLOSED{background:var(--INACTIVE)}.b.URGENT{background:var(--OVERDUE);color:#fff}.b.HIGH{background:var(--LOST)}.b.NORMAL,.b.LOW{background:var(--p2);color:var(--t)}
+nav button{font-size:11px}
 </style></head>
 <body>
 <div id="off" hidden>OFFLINE: connectivity is required to sign equipment out or in</div>
@@ -86,7 +99,7 @@ const TZ = 'Africa/Johannesburg', CATS = ['Handheld Radio', 'Scanner', 'Tablet',
 const PRESET = { 'Handheld Radio': 12, 'Scanner': 12, 'Tablet': 12, 'Extension Cable': 24, 'Generator': 48 }, CONDS = ['GOOD', 'FAIR', 'DAMAGED'];
 const PLANS = { TRIAL: [5, 25], STANDARD: [50, 500], PROFESSIONAL: [200, 2000], ENTERPRISE: [1000, 10000] };
 const LINK = (new URLSearchParams(location.search).get('c') || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-const S = { user: null, cid: null, cust: null, sub: {}, view: 'home', eq: [], emp: [], loc: [], users: [], tx: null, recent: [], sel: null, pend: null, scanning: false, tab: 'eq', edit: null, q: '', hq: '', xo: false, plat: null, cf: null, af: null, err: '', blocked: false, un: [], brand: null, lb: null, lbDone: false, logoPrev: null };
+const S = { user: null, cid: null, cust: null, sub: {}, view: 'home', eq: [], emp: [], loc: [], users: [], tx: null, recent: [], sel: null, pend: null, scanning: false, tab: 'eq', edit: null, q: '', hq: '', xo: false, plat: null, cf: null, af: null, err: '', blocked: false, un: [], brand: null, lb: null, lbDone: false, logoPrev: null, tk: null, tsel: null, msgs: null, ml: false, tform: false };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = t => t?.toDate ? new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(t.toDate()) : '—';
 const dur = ms => { const m = Math.floor(Math.max(0, ms) / 6e4); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
@@ -124,9 +137,22 @@ const recentHTML = () => S.recent.length ? '<div class="sec">RECENT TRANSACTIONS
 const V = {
   login: () => `${loginBrand()}<h2>Sign in</h2>${S.err ? `<p class="warn">${esc(S.err)}</p>` : ''}<div class="panel"><label>Email</label><input id="em" type="email" autocomplete="username" autocapitalize="none"><label>Password</label><input id="pw" type="password" autocomplete="current-password"><button class="btn" data-act="login">LOGIN</button><button class="btn ghost" data-act="reset">FORGOT PASSWORD</button></div>`,
   blocked: () => `<h2>Access suspended</h2><div class="panel"><p>The <b>${esc(S.cust?.name || 'organisation')}</b> account is <b>${esc(S.cust?.status || 'unavailable')}</b>. Your data is safe. Please contact dataX to restore access.</p></div>`,
-  home() { const a = S.eq.filter(e => e.status !== 'RETIRED'), k = x => a.filter(e => st(e) === x).length, stat = (n, l, c) => `<div class="stat" style="--c:var(--${c})"><b>${n}</b><span>${l}</span></div>`;
-    return `<div class="grid">${stat(a.length, 'TOTAL EQUIPMENT', 'a')}${stat(k('AVAILABLE'), 'AVAILABLE', 'AVAILABLE')}${stat(a.filter(e => e.status === 'ISSUED').length, 'ISSUED', 'OUT')}${stat(k('OVERDUE'), 'OUTSTANDING', 'OVERDUE')}${stat(k('MAINTENANCE'), 'MAINTENANCE', 'MAINTENANCE')}${stat(k('DAMAGED'), 'DAMAGED', 'LOST')}${stat(k('LOST'), 'LOST', 'LOST')}</div>
-    ${staff() ? '<button class="btn big" data-act="go" data-v="scan">SCAN EQUIPMENT</button>' : ''}${recentHTML()}${catCards(a)}<input id="sq" type="search" placeholder="Search ID, name, serial, person" value="${esc(S.q)}"><div id="lst">${lst()}</div>`; },
+  home() { const a = S.eq.filter(e => e.status !== 'RETIRED'), k = x => a.filter(e => st(e) === x).length, iss = a.filter(e => e.status === 'ISSUED').length, od = k('OVERDUE'), av = k('AVAILABLE'), un = a.length - av - iss;
+    const kpi = (n, l, c) => `<div class="kpi" style="--c:var(--${c})"><b>${n}</b><span>${l}</span></div>`, pc = n => a.length ? (n / a.length * 100).toFixed(1) : 0, dot = (c, t) => `<span><i style="background:var(--${c})"></i>${t}</span>`;
+    const time = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+    return `<div class="dh"><b>Equipment overview</b><span>Updated ${time}</span></div>
+    <div class="kpis">${kpi(a.length, 'Total', 'a')}${kpi(av, 'Available', 'AVAILABLE')}${kpi(iss, 'Issued', 'OUT')}${kpi(od, 'Overdue', 'OVERDUE')}</div>
+    <div class="bar"><i style="width:${pc(av)}%;background:var(--AVAILABLE)"></i><i style="width:${pc(iss - od)}%;background:var(--OUT)"></i><i style="width:${pc(od)}%;background:var(--OVERDUE)"></i><i style="width:${pc(un)}%;background:var(--INACTIVE)"></i></div>
+    <div class="legend">${dot('AVAILABLE', 'Available ' + av)}${dot('OUT', 'Issued ' + (iss - od))}${dot('OVERDUE', 'Overdue ' + od)}${dot('INACTIVE', `Unavailable ${un}`)}</div>
+    ${un ? `<div class="m" style="margin:-6px 2px 12px">Maintenance ${k('MAINTENANCE')} · Damaged ${k('DAMAGED')} · Lost ${k('LOST')}</div>` : ''}
+    ${staff() ? '<button class="btn scanbtn" data-act="go" data-v="scan">SCAN EQUIPMENT</button>' : ''}${attention(a)}${catTable(a)}${recentHTML()}`; },
+  equip: () => `<h2>Equipment</h2><input id="sq" type="search" placeholder="Search ID, name, serial, person" value="${esc(S.q)}"><div id="lst">${lst()}</div>`,
+  tickets() { if (!S.tk) { loadTickets(); return '<p class="m">Loading…</p>'; } const open = S.tk.filter(t => t.status !== 'CLOSED').length;
+    return `<h2>${isPlat() ? 'Support tickets' : 'Support'}</h2><p class="m">${open} open · ${S.tk.length} total</p>${isPlat() ? '' : S.tform ? tkForm() : '<button class="btn" data-act="newTk">LOG A TICKET</button>'}${S.tk.map(tkCard).join('') || '<p class="m">No tickets yet.</p>'}`; },
+  ticket() { const t = S.tk?.find(x => x.id === S.tsel); if (!t) return V.tickets(); if (!S.msgs && !S.ml) { S.ml = true; loadMsgs(t.id); }
+    return `<button class="lnk" style="padding:0" data-act="go" data-v="tickets">← All tickets</button><h2>${esc(t.ticketNo)} ${badge(t.status)}</h2><div class="panel"><dl class="kv"><dt>Subject</dt><dd>${esc(t.subject)}</dd><dt>Category</dt><dd>${esc(t.category)}</dd><dt>Priority</dt><dd>${badge(t.priority)}</dd>${isPlat() ? `<dt>Customer</dt><dd>${esc(t.customerName)}</dd>` : ''}<dt>Logged by</dt><dd>${esc(t.createdByName)}</dd><dt>Logged</dt><dd>${fmt(t.createdAt)}</dd></dl><p>${esc(t.description)}</p></div>
+    <div class="sec">CONVERSATION</div>${S.msgs ? (S.msgs.map(m => `<div class="msg ${m.authorRole === 'DATAX_ADMIN' ? 'dx' : 'me'}"><small>${m.authorRole === 'DATAX_ADMIN' ? 'dataX Support' : esc(m.authorName)} · ${fmt(m.createdAt)}</small>${esc(m.text)}</div>`).join('') || '<p class="m">No replies yet.</p>') : '<p class="m">Loading…</p>'}
+    <div class="panel"><label>Reply</label><textarea id="t_msg" placeholder="Type your message"></textarea><button class="btn" data-act="sendMsg">SEND</button>${isPlat() ? '<div class="row"><button class="btn ghost" data-act="setTk" data-s="IN_PROGRESS">IN PROGRESS</button><button class="btn ghost" data-act="setTk" data-s="RESOLVED">RESOLVED</button><button class="btn ghost" data-act="setTk" data-s="CLOSED">CLOSE</button></div>' : (t.status === 'CLOSED' ? '<button class="btn ghost" data-act="setTk" data-s="OPEN">REOPEN TICKET</button>' : '<button class="btn ghost" data-act="setTk" data-s="CLOSED">CLOSE TICKET</button>')}</div>`; },
   scan: () => `<h2>SCAN EQUIPMENT</h2><p class="m">Hold your phone near the equipment NFC tag.</p>${nfcSupported ? '' : '<p class="warn">NFC scanning is not supported on this device/browser.</p>'}
     <button class="btn big" data-act="nfc" ${nfcSupported ? '' : 'disabled'}>${S.scanning ? 'WAITING FOR TAG…' : 'SCAN NFC'}</button>
     <div class="panel"><label>ENTER EQUIPMENT ID</label><input id="eid" placeholder="RAD-00125" autocapitalize="characters"><button class="btn ghost" data-act="find">FIND EQUIPMENT</button></div>`,
@@ -177,6 +203,21 @@ const custForm = () => { const f = S.cf; return `<div class="panel"><h2>${f.cust
 const admForm = () => `<div class="panel"><h2>Add Customer Admin (${esc(S.af)})</h2><label>Name</label><input id="ad_name"><label>Email</label><input id="ad_email" type="email" autocapitalize="none"><label>Temporary password (min 6)</label><input id="ad_pw" type="text" autocomplete="off"><button class="btn" data-act="saveAdm">CREATE ADMIN</button><button class="btn ghost" data-act="cancelCust">CANCEL</button></div>`;
 const custCard = c => `<div class="card ${c.status}"><div><b>${esc(c.name)}</b> ${badge(c.status)}<div class="m">ID ${esc(c.customerId)} · Plan ${esc(c.sub.plan || c.plan)}</div><div class="m">Users ${c.users}/${c.sub.userLimit ?? '∞'} · Equipment ${c.equip}/${c.sub.equipmentLimit ?? '∞'} · Issued ${c.issued} · This month ${c.month}</div>
   <div class="row" style="margin-top:8px;flex-wrap:wrap"><button class="btn sm ghost" data-act="copyLink" data-id="${esc(c.customerId)}">COPY LINK</button><button class="btn sm ghost" data-act="editCust" data-id="${esc(c.customerId)}">EDIT</button><button class="btn sm ghost" data-act="togCust" data-id="${esc(c.customerId)}">${c.status === 'SUSPENDED' ? 'ACTIVATE' : 'SUSPEND'}</button><button class="btn sm ghost" data-act="addAdm" data-id="${esc(c.customerId)}">ADD ADMIN</button></div></div></div>`;
+
+// ---------- dashboard helpers & tickets ----------
+const ORD = ['OVERDUE', 'DAMAGED', 'LOST', 'MAINTENANCE'];
+const attention = a => { const l = a.filter(e => ORD.includes(st(e))).sort((x, y) => ORD.indexOf(st(x)) - ORD.indexOf(st(y)));
+  return '<div class="sec">NEEDS ATTENTION</div>' + (l.length ? l.slice(0, 5).map(e => card(e)).join('') + (l.length > 5 ? `<button class="btn ghost" data-act="go" data-v="equip">VIEW ALL (${l.length})</button>` : '') : '<div class="okbox">✓ Nothing overdue or unavailable</div>'); };
+const catTable = a => { const cs = [...new Set(a.map(e => e.category || 'Other'))].sort(); if (!cs.length) return '';
+  const row = (n, l, cls = '') => { const od = l.filter(e => st(e) === 'OVERDUE').length; return `<div class="tr ${cls}"><span>${esc(n)}</span><span class="g">${l.filter(e => st(e) === 'AVAILABLE').length}</span><span class="bl">${l.filter(e => e.status === 'ISSUED').length}</span><span class="${od ? 'rd' : ''}">${od}</span><span>${l.length}</span></div>`; };
+  return `<div class="sec">BY CATEGORY</div><div class="tbl"><div class="tr th"><span>Category</span><span>Avail</span><span>Issued</span><span>Over</span><span>Total</span></div>${cs.map(c => row(c, a.filter(e => (e.category || 'Other') === c))).join('')}${row('All equipment', a, 'tt')}</div>`; };
+const tkRank = { OPEN: 0, IN_PROGRESS: 1, RESOLVED: 2, CLOSED: 3 };
+const tkCard = t => `<div class="card ${t.status}" data-act="openTk" data-id="${esc(t.id)}"><div><b>${esc(t.ticketNo)}</b> ${badge(t.status)}${badge(t.priority)}<div>${esc(t.subject)}</div><div class="m">${isPlat() ? esc(t.customerName) + ' · ' : ''}${esc(t.createdByName)} · ${fmt(t.createdAt)}</div></div></div>`;
+const tkForm = () => `<div class="panel"><h2>Log a ticket</h2><label>Subject</label><input id="t_sub" maxlength="100" placeholder="Short summary"><label>Category</label><select id="t_cat">${opt(['Equipment fault', 'NFC tag issue', 'Account or login', 'Request', 'Question', 'Other'])}</select>
+  <label>Priority</label><select id="t_pri">${opt(['LOW', 'NORMAL', 'HIGH', 'URGENT'], 'NORMAL')}</select><label>Description</label><textarea id="t_desc" rows="4" placeholder="What happened? Include equipment IDs if relevant."></textarea><button class="btn" data-act="saveTk">SUBMIT TICKET</button><button class="btn ghost" data-act="cancelTk">CANCEL</button></div>`;
+async function loadTickets() { try { const q = isPlat() ? query(collection(db, 'tickets'), orderBy('createdAt', 'desc'), limit(200)) : query(collection(db, 'tickets'), where('customerId', '==', S.cid));
+    S.tk = (await getDocs(q)).docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => tkRank[a.status] - tkRank[b.status] || (b.createdAt?.toMillis?.() ?? Date.now()) - (a.createdAt?.toMillis?.() ?? Date.now())); } catch (e) { S.tk = []; toast(e.message); } render(); }
+async function loadMsgs(id) { try { S.msgs = (await getDocs(query(collection(db, 'tickets', id, 'messages'), orderBy('createdAt', 'asc')))).docs.map(d => d.data()); } catch (e) { S.msgs = []; toast(e.message); } S.ml = false; render(); }
 
 // ---------- branding ----------
 async function toLogo(file) { const url = URL.createObjectURL(file); const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(Error('Could not read that image')); i.src = url; });
@@ -260,6 +301,14 @@ const acts = {
   delUser: () => run(async () => { const x = S.edit; if (!x) return; if (x.uid === S.user.uid) return toast('You cannot delete your own account'); if (x.role === 'CUSTOMER_ADMIN' && !S.users.some(u => u.uid !== x.uid && u.role === 'CUSTOMER_ADMIN' && u.active !== false)) return toast('Keep at least one active Customer Admin');
     if (!confirm(`Delete user ${x.name}? They will lose all access. Their history keeps their name.`)) return; await deleteDoc(doc(db, 'users', x.uid)); audit('USER_DELETED', { details: x.email }); S.edit = null; toast('User deleted'); render(); }),
   xlsxPanel: () => { S.xo = !S.xo; render(); },
+  newTk: () => { S.tform = true; render(); }, cancelTk: () => { S.tform = false; render(); }, openTk: d => { S.tsel = d.id; S.msgs = null; S.ml = false; S.view = 'ticket'; render(); scrollTo(0, 0); },
+  saveTk: () => run(async () => { const sub = val('t_sub'), desc = val('t_desc'); if (sub.length < 3 || desc.length < 5) return toast('Enter a subject and a description'); const d = new Date(), p = n => String(n).padStart(2, '0'), no = `${S.cid}-${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    await addDoc(collection(db, 'tickets'), { ticketNo: no, customerId: S.cid, customerName: S.cust?.name || S.cid, subject: sub, category: val('t_cat'), priority: val('t_pri'), description: desc, status: 'OPEN', createdBy: S.user.uid, createdByName: S.user.name, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    audit('TICKET_LOGGED', { details: no }); S.tform = false; S.tk = null; toast('Ticket ' + no + ' logged'); render(); }),
+  sendMsg: () => run(async () => { const t = S.tk.find(x => x.id === S.tsel), txt = val('t_msg'); if (!txt) return toast('Type a message');
+    await addDoc(collection(db, 'tickets', t.id, 'messages'), { customerId: t.customerId, authorId: S.user.uid, authorName: isPlat() ? 'dataX Support' : S.user.name, authorRole: S.user.role, text: txt, createdAt: serverTimestamp() });
+    const ns = isPlat() ? (t.status === 'OPEN' ? 'IN_PROGRESS' : t.status) : 'OPEN'; await setDoc(doc(db, 'tickets', t.id), { status: ns, updatedAt: serverTimestamp() }, { merge: true }); t.status = ns; S.msgs = null; S.ml = false; toast('Sent'); render(); }),
+  setTk: d => run(async () => { const t = S.tk.find(x => x.id === S.tsel); await setDoc(doc(db, 'tickets', t.id), { status: d.s, updatedAt: serverTimestamp() }, { merge: true }); t.status = d.s; if (!isPlat()) audit('TICKET_' + d.s, { details: t.ticketNo }); toast('Ticket ' + d.s.replace('_', ' ').toLowerCase()); render(); }),
   copyLink: d => { const u = location.origin + location.pathname + '?c=' + d.id; (navigator.clipboard?.writeText(u) || Promise.reject()).then(() => toast('Link copied: ' + u)).catch(() => prompt('Copy this company link', u)); },
   saveLogo: () => run(async () => { if (!S.brand) return toast('Branding is not enabled yet. Ask dataX to open your company in the platform console once.'); if (!S.logoPrev) return toast('Choose an image first');
     await setDoc(doc(db, 'branding', S.cid), { logo: S.logoPrev, updatedAt: serverTimestamp() }, { merge: true }); S.brand = { ...S.brand, logo: S.logoPrev }; S.logoPrev = null; audit('LOGO_UPDATED'); toast('Logo saved'); render(); }),
@@ -334,22 +383,23 @@ function render() { const u = S.user; $('#out').hidden = !u; const bn = u ? (isP
   L.className = lg ? 'logoimg' : 'logo'; L.innerHTML = lg ? `<img src="${esc(lg)}" alt="">` : '';
   $('#ttl').innerHTML = bn ? `${esc(bn)}<small>Digital Equipment Accountability System · Powered by dataX</small>` : 'dataX<small>Digital Equipment Accountability System</small>';
   $('#cust').textContent = 'PLATFORM'; $('#cust').hidden = !(u && isPlat());
-  const items = !u || S.blocked || isPlat() ? [] : [['home', '⌂', 'Home'], ...(staff() ? [['scan', '◉', 'Scan']] : []), ['history', '≡', 'History'], ...(isCA() ? [['admin', '⚙', 'Admin']] : [])];
-  const n = $('#nav'); n.style.display = items.length > 1 ? 'flex' : 'none'; n.innerHTML = items.map(([v, i, t]) => `<button class="${S.view === v ? 'on' : ''}" data-act="go" data-v="${v}"><b>${i}</b>${t}</button>`).join('');
+  const openTk = (S.tk || []).filter(t => t.status === 'OPEN').length;
+  const items = !u || S.blocked ? [] : isPlat() ? [['platform', '◈', 'Customers'], ['tickets', '✉', 'Tickets' + (openTk ? ` (${openTk})` : '')]] : [['home', '⌂', 'Home'], ...(staff() ? [['scan', '◉', 'Scan']] : []), ['equip', '▤', 'Equipment'], ['history', '≡', 'History'], ...(staff() ? [['tickets', '✉', 'Support']] : []), ...(isCA() ? [['admin', '⚙', 'Admin']] : [])];
+  const n = $('#nav'); n.style.display = items.length > 1 ? 'flex' : 'none'; n.innerHTML = items.map(([v, i, t]) => `<button class="${(S.view === 'ticket' ? 'tickets' : S.view) === v ? 'on' : ''}" data-act="go" data-v="${v}"><b>${i}</b>${t}</button>`).join('');
   A.innerHTML = !u ? V.login() : S.blocked ? V.blocked() : (V[S.view] || V.home)(); }
 const unsub = () => { S.un.forEach(f => f()); S.un = []; };
 function start() { const on = (q, f) => S.un.push(onSnapshot(q, f, e => toast('Database error: ' + e.message)));
-  on(col('equipment'), s => { S.eq = sorted(s.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })), 'equipmentId'); if (['home', 'item'].includes(S.view) && !S.pend && !document.activeElement?.matches('input,select')) render(); });
+  on(col('equipment'), s => { S.eq = sorted(s.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })), 'equipmentId'); if (['home', 'equip', 'item'].includes(S.view) && !S.pend && !document.activeElement?.matches('input,select')) render(); });
   on(col('employees'), s => { S.emp = s.docs.map(d => ({ id: d.id, ...d.data() })); }); on(col('locations'), s => { S.loc = s.docs.map(d => ({ id: d.id, ...d.data() })); });
   if (isCA()) on(query(collection(db, 'users'), where('customerId', '==', S.cid)), s => { S.users = s.docs.map(d => d.data()); }); loadRecent(); }
-onAuthStateChanged(auth, async u => { unsub(); S.user = null; S.brand = null; S.blocked = false; S.eq = []; S.tx = null; S.plat = null; if (!u) return render();
+onAuthStateChanged(auth, async u => { unsub(); S.user = null; S.brand = null; S.tk = null; S.msgs = null; S.tsel = null; S.blocked = false; S.eq = []; S.tx = null; S.plat = null; if (!u) return render();
   let p; try { p = await getDoc(doc(db, 'users', u.uid)); } catch { p = null; }
   if (!p?.exists() || p.data().active === false) { S.err = 'This account is not set up or has been disabled. Contact your administrator.'; return signOut(auth); }
   S.user = { uid: u.uid, email: u.email, ...p.data() }; S.cid = S.user.customerId; S.view = isPlat() ? 'platform' : 'home';
   if (LINK && !isPlat() && S.cid !== LINK) { S.err = 'This account does not belong to this company link.'; return signOut(auth); }
   if (!isPlat()) { try { S.cust = (await getDoc(doc(db, 'customers', S.cid))).data(); } catch { S.cust = null; }
     if (!['TRIAL', 'ACTIVE'].includes(S.cust?.status)) { S.blocked = true; return render(); }
-    S.sub = (await getDoc(doc(db, 'subscriptions', S.cid)).catch(() => null))?.data() || {}; S.brand = (await getDoc(doc(db, 'branding', S.cid)).catch(() => null))?.data() || null; start(); audit('USER_LOGIN'); } else plog('USER_LOGIN', 'DATAX', S.user.name);
+    S.sub = (await getDoc(doc(db, 'subscriptions', S.cid)).catch(() => null))?.data() || {}; S.brand = (await getDoc(doc(db, 'branding', S.cid)).catch(() => null))?.data() || null; start(); audit('USER_LOGIN'); } else { plog('USER_LOGIN', 'DATAX', S.user.name); loadTickets(); }
   render(); });
 setInterval(() => { if (S.user && S.view === 'home' && !document.activeElement?.matches('input')) render(); }, 30000);
 const net = () => $('#off').hidden = navigator.onLine; addEventListener('online', net); addEventListener('offline', net); net();
