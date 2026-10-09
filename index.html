@@ -99,7 +99,9 @@ const TZ = 'Africa/Johannesburg', CATS = ['Handheld Radio', 'Scanner', 'Tablet',
 const PRESET = { 'Handheld Radio': 12, 'Scanner': 12, 'Tablet': 12, 'Extension Cable': 24, 'Generator': 48 }, CONDS = ['GOOD', 'FAIR', 'DAMAGED'];
 const PLANS = { TRIAL: [5, 25], STANDARD: [50, 500], PROFESSIONAL: [200, 2000], ENTERPRISE: [1000, 10000] };
 const LINK = (new URLSearchParams(location.search).get('c') || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-const S = { user: null, cid: null, cust: null, sub: {}, view: 'home', eq: [], emp: [], loc: [], users: [], tx: null, recent: [], sel: null, pend: null, scanning: false, tab: 'eq', edit: null, q: '', hq: '', xo: false, plat: null, cf: null, af: null, err: '', blocked: false, un: [], brand: null, lb: null, lbDone: false, logoPrev: null, tk: null, tsel: null, msgs: null, ml: false, tform: false };
+const S = { user: null, cid: null, cust: null, sub: {}, view: 'home', eq: [], emp: [], loc: [], users: [], tx: null, recent: [], sel: null, pend: null, scanning: false, tab: 'eq', edit: null, q: '', hq: '', xo: false, plat: null, cf: null, af: null, err: '', blocked: false, un: [], brand: null, lb: null, lbDone: false, logoPrev: null, tk: null, tsel: null, msgs: null, ml: false, tform: false, ready: false, last: null };
+const lsj = { get: k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }, set: (k, v) => { try { v ? localStorage.setItem(k, JSON.stringify(v)) : localStorage.removeItem(k); } catch { } } };
+S.lb = LINK ? lsj.get('dx_b_' + LINK) : null; S.last = lsj.get('dx_last');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = t => t?.toDate ? new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(t.toDate()) : '—';
 const dur = ms => { const m = Math.floor(Math.max(0, ms) / 6e4); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
@@ -376,34 +378,35 @@ acts.xlsx = async () => { if (!need()) return; toast('Preparing Excel file…');
 document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) acts[b.dataset.act]?.(b.dataset); });
 document.addEventListener('input', e => { if (e.target.id === 'sq') { S.q = e.target.value; $('#lst').innerHTML = lst(); } if (e.target.id === 'hq') { S.hq = e.target.value; $('#txl').innerHTML = txHTML(); } });
 document.addEventListener('change', async e => { if (e.target.id !== 'logo' || !e.target.files[0]) return; try { S.logoPrev = await toLogo(e.target.files[0]); $('#lprev').innerHTML = `<div class="brand"><img src="${S.logoPrev}" alt=""><div><span>Preview</span></div></div>`; } catch (x) { S.logoPrev = null; toast(x.message); } });
-$('#out').onclick = () => signOut(auth);
+$('#out').onclick = () => { lsj.set('dx_last', null); signOut(auth); };
 
 // ---------- session & render ----------
-function render() { const u = S.user; $('#out').hidden = !u; const bn = u ? (isPlat() ? null : S.cust?.name) : S.lb?.name, lg = u ? S.brand?.logo : S.lb?.logo, L = $('#logo');
+function render() { const u = S.user; $('#out').hidden = !u; const pre = !S.ready ? (S.lb || S.last) : null, bn = pre ? pre.name : u ? (isPlat() ? null : S.cust?.name) : S.lb?.name, lg = pre ? pre.logo : u ? S.brand?.logo : S.lb?.logo, L = $('#logo');
   L.className = lg ? 'logoimg' : 'logo'; L.innerHTML = lg ? `<img src="${esc(lg)}" alt="">` : '';
-  $('#ttl').innerHTML = bn ? `${esc(bn)}<small>Digital Equipment Accountability System · Powered by dataX</small>` : 'dataX<small>Digital Equipment Accountability System</small>';
+  $('#ttl').innerHTML = bn ? `${esc(bn)}<small>Digital Equipment Accountability System · Powered by dataX</small>` : (!S.ready || (LINK && !u && !S.lbDone)) ? '' : 'dataX<small>Digital Equipment Accountability System</small>';
   $('#cust').textContent = 'PLATFORM'; $('#cust').hidden = !(u && isPlat());
   const openTk = (S.tk || []).filter(t => t.status === 'OPEN').length;
   const items = !u || S.blocked ? [] : isPlat() ? [['platform', '◈', 'Customers'], ['tickets', '✉', 'Tickets' + (openTk ? ` (${openTk})` : '')]] : [['home', '⌂', 'Home'], ...(staff() ? [['scan', '◉', 'Scan']] : []), ['equip', '▤', 'Equipment'], ['history', '≡', 'History'], ...(staff() ? [['tickets', '✉', 'Support']] : []), ...(isCA() ? [['admin', '⚙', 'Admin']] : [])];
   const n = $('#nav'); n.style.display = items.length > 1 ? 'flex' : 'none'; n.innerHTML = items.map(([v, i, t]) => `<button class="${(S.view === 'ticket' ? 'tickets' : S.view) === v ? 'on' : ''}" data-act="go" data-v="${v}"><b>${i}</b>${t}</button>`).join('');
-  A.innerHTML = !u ? V.login() : S.blocked ? V.blocked() : (V[S.view] || V.home)(); }
+  A.innerHTML = !S.ready ? '<p class="m">Loading…</p>' : !u ? V.login() : S.blocked ? V.blocked() : (V[S.view] || V.home)(); }
 const unsub = () => { S.un.forEach(f => f()); S.un = []; };
 function start() { const on = (q, f) => S.un.push(onSnapshot(q, f, e => toast('Database error: ' + e.message)));
   on(col('equipment'), s => { S.eq = sorted(s.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })), 'equipmentId'); if (['home', 'equip', 'item'].includes(S.view) && !S.pend && !document.activeElement?.matches('input,select')) render(); });
   on(col('employees'), s => { S.emp = s.docs.map(d => ({ id: d.id, ...d.data() })); }); on(col('locations'), s => { S.loc = s.docs.map(d => ({ id: d.id, ...d.data() })); });
   if (isCA()) on(query(collection(db, 'users'), where('customerId', '==', S.cid)), s => { S.users = s.docs.map(d => d.data()); }); loadRecent(); }
-onAuthStateChanged(auth, async u => { unsub(); S.user = null; S.brand = null; S.tk = null; S.msgs = null; S.tsel = null; S.blocked = false; S.eq = []; S.tx = null; S.plat = null; if (!u) return render();
+onAuthStateChanged(auth, async u => { unsub(); S.user = null; S.brand = null; S.tk = null; S.msgs = null; S.tsel = null; S.blocked = false; S.eq = []; S.tx = null; S.plat = null; if (!u) { S.ready = true; return render(); }
   let p; try { p = await getDoc(doc(db, 'users', u.uid)); } catch { p = null; }
   if (!p?.exists() || p.data().active === false) { S.err = 'This account is not set up or has been disabled. Contact your administrator.'; return signOut(auth); }
-  S.user = { uid: u.uid, email: u.email, ...p.data() }; S.cid = S.user.customerId; S.view = isPlat() ? 'platform' : 'home';
+  S.user = { uid: u.uid, email: u.email, ...p.data() }; S.ready = true; S.cid = S.user.customerId; S.view = isPlat() ? 'platform' : 'home';
   if (LINK && !isPlat() && S.cid !== LINK) { S.err = 'This account does not belong to this company link.'; return signOut(auth); }
   if (!isPlat()) { try { S.cust = (await getDoc(doc(db, 'customers', S.cid))).data(); } catch { S.cust = null; }
     if (!['TRIAL', 'ACTIVE'].includes(S.cust?.status)) { S.blocked = true; return render(); }
-    S.sub = (await getDoc(doc(db, 'subscriptions', S.cid)).catch(() => null))?.data() || {}; S.brand = (await getDoc(doc(db, 'branding', S.cid)).catch(() => null))?.data() || null; start(); audit('USER_LOGIN'); } else { plog('USER_LOGIN', 'DATAX', S.user.name); loadTickets(); }
+    S.sub = (await getDoc(doc(db, 'subscriptions', S.cid)).catch(() => null))?.data() || {}; S.brand = (await getDoc(doc(db, 'branding', S.cid)).catch(() => null))?.data() || null; lsj.set('dx_last', { name: S.cust.name, logo: S.brand?.logo || '' }); start(); audit('USER_LOGIN'); } else { lsj.set('dx_last', null); plog('USER_LOGIN', 'DATAX', S.user.name); loadTickets(); }
   render(); });
 setInterval(() => { if (S.user && S.view === 'home' && !document.activeElement?.matches('input')) render(); }, 30000);
 const net = () => $('#off').hidden = navigator.onLine; addEventListener('online', net); addEventListener('offline', net); net();
-if (LINK) getDoc(doc(db, 'branding', LINK)).then(b => { S.lb = b.exists() ? b.data() : null; S.lbDone = true; if (!S.user) render(); }).catch(() => { S.lbDone = true; });
+setTimeout(() => { if (!S.ready) { S.ready = true; render(); } }, 5000);
+if (LINK) getDoc(doc(db, 'branding', LINK)).then(b => { S.lb = b.exists() ? b.data() : null; S.lbDone = true; lsj.set('dx_b_' + LINK, S.lb ? { name: S.lb.name, logo: S.lb.logo || '' } : null); if (!S.user) render(); }).catch(() => { S.lbDone = true; });
 render();
 
 </script>
