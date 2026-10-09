@@ -42,10 +42,11 @@ h1 small{display:block;font-size:10px;letter-spacing:.1em;color:var(--m);font-we
 .tabs button{font-size:14px;padding:0 4px}
 .brand{display:flex;align-items:center;gap:12px;margin:6px 0 16px}.brand img{max-height:64px;max-width:96px;object-fit:contain;background:#fff;border-radius:10px;padding:4px}.brand b{display:block;font-size:20px}.brand span{color:var(--m);font-size:12px}
 .tabs{flex-wrap:wrap}.tabs button{flex:1 1 30%}.chip{max-width:46vw}.chip img{height:20px;vertical-align:middle;margin-right:6px;border-radius:3px;background:#fff;padding:1px}
+.logoimg img{height:34px;max-width:64px;object-fit:contain;background:#fff;border-radius:6px;padding:2px;display:block}h1{line-height:1.2}
 </style></head>
 <body>
 <div id="off" hidden>OFFLINE: connectivity is required to sign equipment out or in</div>
-<header><span class="logo"></span><h1>dataX<small>Digital Equipment Accountability System</small></h1><span id="cust" class="chip" hidden></span><button id="out" class="lnk" hidden>Log out</button></header>
+<header><span class="logo" id="logo"></span><h1 id="ttl">dataX<small>Digital Equipment Accountability System</small></h1><span id="cust" class="chip" hidden></span><button id="out" class="lnk" hidden>Log out</button></header>
 <main id="app"></main><nav id="nav"></nav><div id="toast"></div>
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -181,7 +182,7 @@ const custCard = c => `<div class="card ${c.status}"><div><b>${esc(c.name)}</b> 
 async function toLogo(file) { const url = URL.createObjectURL(file); const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(Error('Could not read that image')); i.src = url; });
   const r = Math.min(1, 256 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(img.width * r)); c.height = Math.max(1, Math.round(img.height * r)); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
   let d = c.toDataURL('image/png'); if (d.length > 200000) d = c.toDataURL('image/jpeg', .85); if (d.length > 300000) throw Error('Image is too complex. Use a simpler logo.'); return d; }
-const loginBrand = () => S.lb ? `<div class="brand">${S.lb.logo ? `<img src="${esc(S.lb.logo)}" alt="">` : ''}<div><b>${esc(S.lb.name)}</b><span>Powered by dataX</span></div></div>` : LINK && S.lbDone ? '<p class="warn">Company link not recognised.</p>' : '';
+const loginBrand = () => LINK && S.lbDone && !S.lb ? '<p class="warn">Company link not recognised.</p>' : '';
 function adminBrand() { const b = S.brand || {};
   return `<div class="panel"><h2>Company logo</h2><p class="m">Shown on your login page and in the app header. dataX branding stays visible.</p>${b.logo ? `<div class="brand"><img src="${esc(b.logo)}" alt=""><div><b>${esc(S.cust?.name)}</b></div></div>` : '<p class="m">No logo uploaded yet.</p>'}
   <label>Choose logo image (PNG, JPG or SVG)</label><input id="logo" type="file" accept="image/*"><div id="lprev"></div><button class="btn" data-act="saveLogo">SAVE LOGO</button>${b.logo ? '<button class="btn ghost" data-act="rmLogo">REMOVE LOGO</button>' : ''}</div>`; }
@@ -329,7 +330,10 @@ document.addEventListener('change', async e => { if (e.target.id !== 'logo' || !
 $('#out').onclick = () => signOut(auth);
 
 // ---------- session & render ----------
-function render() { const u = S.user; $('#out').hidden = !u; $('#cust').innerHTML = u ? (isPlat() ? 'PLATFORM' : (S.brand?.logo ? `<img src="${esc(S.brand.logo)}" alt="">` : '') + esc(S.cust?.name || '')) : ''; $('#cust').hidden = !u;
+function render() { const u = S.user; $('#out').hidden = !u; const bn = u ? (isPlat() ? null : S.cust?.name) : S.lb?.name, lg = u ? S.brand?.logo : S.lb?.logo, L = $('#logo');
+  L.className = lg ? 'logoimg' : 'logo'; L.innerHTML = lg ? `<img src="${esc(lg)}" alt="">` : '';
+  $('#ttl').innerHTML = bn ? `${esc(bn)}<small>Digital Equipment Accountability System · Powered by dataX</small>` : 'dataX<small>Digital Equipment Accountability System</small>';
+  $('#cust').textContent = 'PLATFORM'; $('#cust').hidden = !(u && isPlat());
   const items = !u || S.blocked || isPlat() ? [] : [['home', '⌂', 'Home'], ...(staff() ? [['scan', '◉', 'Scan']] : []), ['history', '≡', 'History'], ...(isCA() ? [['admin', '⚙', 'Admin']] : [])];
   const n = $('#nav'); n.style.display = items.length > 1 ? 'flex' : 'none'; n.innerHTML = items.map(([v, i, t]) => `<button class="${S.view === v ? 'on' : ''}" data-act="go" data-v="${v}"><b>${i}</b>${t}</button>`).join('');
   A.innerHTML = !u ? V.login() : S.blocked ? V.blocked() : (V[S.view] || V.home)(); }
