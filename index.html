@@ -64,6 +64,10 @@ footer{max-width:720px;margin:0 auto;padding:18px 14px 96px;text-align:center;co
 .trow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--p2)}.trow:first-child{border-top:0}.trow small{display:block;margin-top:2px}.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;word-break:break-all}
 .chks{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}.cx{cursor:pointer}.cd{border:1px solid var(--p2)}.tr small{display:block}.k3{grid-template-columns:repeat(3,1fr)}.k3 .kpi b{font-size:24px}.k3{gap:8px}
 nav button{font-size:10px;padding:0 1px}
+
+nav{overflow:visible}.fab{position:relative;background:none!important;border:0;color:var(--t)!important;font-size:10px!important}
+.fab b{position:absolute;left:50%;top:-26px;transform:translateX(-50%);width:66px;height:66px;border-radius:50%;background:var(--a);color:#12181f;display:grid;place-items:center;font-size:30px!important;box-shadow:0 4px 16px rgba(0,0,0,.55);border:5px solid var(--bg)}
+.fab span{position:absolute;bottom:5px;left:0;right:0}.fab.on b{background:#fff}
 </style></head>
 <body>
 <div id="off" hidden>OFFLINE: connectivity is required to sign equipment out or in</div>
@@ -167,6 +171,8 @@ const V = {
     <div class="panel"><label>Reply</label><textarea id="t_msg" placeholder="Type your message"></textarea><button class="btn" data-act="sendMsg">SEND</button>${isPlat() ? '<div class="row"><button class="btn ghost" data-act="setTk" data-s="IN_PROGRESS">IN PROGRESS</button><button class="btn ghost" data-act="setTk" data-s="RESOLVED">RESOLVED</button><button class="btn ghost" data-act="setTk" data-s="CLOSED">CLOSE</button></div>' : (t.status === 'CLOSED' ? '<button class="btn ghost" data-act="setTk" data-s="OPEN">REOPEN TICKET</button>' : '<button class="btn ghost" data-act="setTk" data-s="CLOSED">CLOSE TICKET</button>')}</div>`; },
   ptags() { if (!S.plat) { loadPlat(); return '<p class="m">Loading…</p>'; } if (!S.pt) { loadTags(); return '<p class="m">Loading tags…</p>'; } const tot = Object.values(S.pt).reduce((n, l) => n + l.length, 0);
     return `<h2>Registered NFC tags</h2><p class="m">${tot} tag${tot === 1 ? '' : 's'} across ${S.plat.length} client${S.plat.length === 1 ? '' : 's'}</p><input id="ptq" type="search" placeholder="Search tag code, equipment ID or client" value="${esc(S.ptq)}"><div id="ptl">${ptHTML()}</div>`; },
+  more() { const row = (v, i, t, d) => `<div class="card AVAILABLE cx" data-act="go" data-v="${v}"><div><b>${i}  ${t}</b><div class="m">${d}</div></div><span>›</span></div>`;
+    return `<h2>More</h2>${row('insights', '▲', 'Insights', 'Late returns, usage and trends')}${staff() ? row('tickets', '✉', 'Support', 'Log and follow support tickets') : ''}${isCA() ? row('admin', '⚙', 'Admin', 'Equipment, employees, locations, users and branding') : ''}`; },
   insights() { if (!S.ins) { loadIns(); return '<p class="m">Loading insights…</p>'; } const D = insData(), kp = (n, l, c) => `<div class="kpi" style="--c:var(--${c})"><b>${n}</b><span>${l}</span></div>`;
     const tb = (h, rows, cols) => `<div class="tbl"><div class="tr th" style="grid-template-columns:${cols}">${h.map(x => `<span>${x}</span>`).join('')}</div>${rows.map(r => `<div class="tr" style="grid-template-columns:${cols}">${r.map(x => `<span>${x}</span>`).join('')}</div>`).join('') || '<div class="tr"><span>No data in this period</span></div>'}</div>`;
     const people = Object.entries(D.P).filter(([, p]) => p.late + p.still).sort((a, b) => b[1].late + b[1].still - a[1].late - a[1].still).slice(0, 15).map(([n, p]) => [esc(n), p.n, p.late, p.still, dur(p.lateMs / (p.late + p.still))]);
@@ -192,7 +198,7 @@ const V = {
     }
     return `<h2>${esc(e.equipmentId)} ${badge(s)}</h2><div class="panel"><dl class="kv"><dt>Name</dt><dd>${esc(e.name)}</dd><dt>Category</dt><dd>${esc(e.category)}</dd><dt>Location</dt><dd>${esc(e.locationName || '—')}</dd><dt>Condition</dt><dd>${badge(e.condition || 'GOOD')} ${esc(e.conditionNote)}</dd>
     ${e.status === 'ISSUED' ? `<dt>Issued to</dt><dd>${esc(e.issuedToName)}</dd><dt>Issued</dt><dd>${fmt(e.issuedAt)}</dd><dt>Duration</dt><dd>${dur(Date.now() - tms(e))}</dd>` : ''}
-    ${s === 'OVERDUE' ? `<dt>Overdue</dt><dd class="warn">⚠ ${dur(Date.now() - tms(e) - hrs(e) * 36e5)}</dd>` : ''}</dl></div>${a}`; },
+    ${s === 'OVERDUE' ? `<dt>Overdue</dt><dd class="warn">⚠ ${dur(Date.now() - tms(e) - hrs(e) * 36e5)}</dd>` : ''}</dl></div>${a}${staff() ? statusPanel(e) : ''}`; },
   history() { if (!S.tx) { loadTx(); return '<p class="m">Loading…</p>'; }
     return `<h2>History</h2><input id="hq" type="search" placeholder="Equipment, category or employee" value="${esc(S.hq)}">${staff() ? (S.xo ? xpanel() : '<button class="btn" data-act="xlsxPanel">EXPORT TO EXCEL</button>') : ''}<div id="txl">${txHTML()}</div>`; },
   admin() { if (!isCA()) return V.home(); const T = { eq: ['Equipment', adminEq], emp: ['Employees', adminEmp], loc: ['Locations', adminLoc], usr: ['Users', adminUsr], brand: ['Branding', adminBrand] };
@@ -264,8 +270,12 @@ function insData() { const days = +S.insR, now = Date.now(), since = days ? now 
   l.forEach(t => { const d = msOf(t), ex = (t.expectedHours || 0) * 36e5, nm = t.employeeName || '—', p = P[nm] ||= { n: 0, late: 0, still: 0, lateMs: 0, dmg: 0 }, e = E[t.equipmentId] ||= { name: t.equipmentName, n: 0, ms: 0, done: 0, late: 0, dmg: 0 };
     p.n++; e.n++; C[t.category || 'Other'] = (C[t.category || 'Other'] || 0) + 1; K[t.createdByName || '—'] = (K[t.createdByName || '—'] || 0) + 1;
     if (d !== null) { ret++; sum += d; e.ms += d; e.done++; if (ex && d > ex) { late++; p.late++; e.late++; p.lateMs += d - ex; } if (t.conditionIn === 'DAMAGED') { dmg++; p.dmg++; e.dmg++; } }
-    else if (ex && now - (t.issuedAt?.toMillis?.() ?? now) > ex) { over++; p.still++; p.lateMs += now - t.issuedAt.toMillis() - ex; } });
+    else if (ex && t.status !== 'LOST' && now - (t.issuedAt?.toMillis?.() ?? now) > ex) { over++; p.still++; p.lateMs += now - t.issuedAt.toMillis() - ex; } });
   return { l, P, E, C, K, ret, late, avg: ret ? sum / ret : 0, dmg, over, onTime: ret ? Math.round((ret - late) / ret * 100) : 100 }; }
+
+const statusPanel = e => { if (e.status === 'RETIRED') return ''; const b = (st2, t) => `<button class="btn ghost" data-act="setSt" data-s="${st2}">${t}</button>`;
+  return `<div class="panel"><label>REPORT OR CHANGE STATUS</label><input id="snote" placeholder="Reason or note (optional)">${e.status === 'ISSUED' ? `<p class="m">Issued equipment can only be reported lost. To mark it broken or in maintenance, return it first.</p>${b('LOST', 'REPORT LOST')}`
+    : `<div class="row">${b('MAINTENANCE', 'MAINTENANCE')}${b('DAMAGED', 'BROKEN')}</div>${b('LOST', 'LOST')}${e.status !== 'AVAILABLE' ? b('AVAILABLE', 'BACK IN SERVICE') : ''}`}</div>`; };
 
 // ---------- branding ----------
 async function toLogo(file) { const url = URL.createObjectURL(file); const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(Error('Could not read that image')); i.src = url; });
@@ -278,7 +288,7 @@ function adminBrand() { const b = S.brand || {};
 
 // ---------- data loaders ----------
 const txCard = t => `<div class="card ${t.status}"><div><b>${esc(t.equipmentId)}</b> ${badge(t.status)}${t.conditionIn ? badge(t.conditionIn) : ''}<div>${esc(t.employeeName)}</div><div class="m">OUT: ${fmt(t.issuedAt)} · IN: ${fmt(t.returnedAt)}</div>
-  <div class="m">Duration: ${dur((t.returnedAt?.toMillis?.() ?? Date.now()) - (t.issuedAt?.toMillis?.() ?? Date.now()))}${t.expectedHours ? ' of ' + t.expectedHours + 'h allowed' : ''} · ${esc(t.createdByName)}${t.returnedByName ? ' / ' + esc(t.returnedByName) : ''}</div>${t.conditionNote ? `<div class="m">Note: ${esc(t.conditionNote)}</div>` : ''}</div></div>`;
+  <div class="m">Duration: ${dur((t.returnedAt?.toMillis?.() ?? t.lostAt?.toMillis?.() ?? Date.now()) - (t.issuedAt?.toMillis?.() ?? Date.now()))}${t.expectedHours ? ' of ' + t.expectedHours + 'h allowed' : ''} · ${esc(t.createdByName)}${t.returnedByName ? ' / ' + esc(t.returnedByName) : ''}</div>${t.conditionNote ? `<div class="m">Note: ${esc(t.conditionNote)}</div>` : ''}</div></div>`;
 const txHTML = () => { const q = S.hq.toLowerCase(), l = (S.tx || []).filter(t => !q || `${t.equipmentId} ${t.equipmentName} ${t.employeeName} ${t.category}`.toLowerCase().includes(q)); if (!l.length) return '<p class="m">No transactions.</p>';
   const g = {}; l.forEach(t => (g[t.category || 'Other'] ||= []).push(t)); return Object.keys(g).sort().map(c => `<div class="grp">${esc(c)}<span>${g[c].length} record${g[c].length === 1 ? '' : 's'}</span></div>` + g[c].map(txCard).join('')).join(''); };
 async function loadTx() { try { S.tx = (await getDocs(query(col('equipmentTransactions'), orderBy('createdAt', 'desc'), limit(300)))).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { S.tx = []; toast(e.message); } render(); }
@@ -357,6 +367,14 @@ const acts = {
     plog('SUBSCRIPTION_CHANGED', c.customerId, `${plan} · ${status} · users ${ul} · equipment ${el} · ${cs.length} categories`); S.plat = null; toast('Saved'); render(); }),
   togUsr: d => run(async () => { const u = S.xu.find(x => x.uid === d.id); await setDoc(doc(db, 'users', u.uid), { active: u.active === false }, { merge: true }); plog(u.active === false ? 'USER_ENABLED' : 'USER_DISABLED', S.xc, u.email); S.xu = null; render(); loadXU(S.xc); }),
   xtag: d => { S.xt.has(d.id) ? S.xt.delete(d.id) : S.xt.add(d.id); $('#ptl').innerHTML = ptHTML(); }, refIns: () => { S.ins = null; render(); },
+  setSt: d => run(async () => { const e = S.eq.find(x => x.id === S.sel), ns = d.s, note = val('snote'), word = { AVAILABLE: 'back in service', MAINTENANCE: 'in maintenance', DAMAGED: 'broken (damaged)', LOST: 'lost' }[ns];
+    if (!confirm(`Mark ${e.equipmentId} as ${word}?`)) return; const eref = dref('equipment', e.id);
+    await runTransaction(db, async t => { const cur = (await t.get(eref)).data(), up = serverTimestamp();
+      if (ns === 'AVAILABLE') { if (['ISSUED', 'AVAILABLE'].includes(cur.status)) throw Error('Nothing to restore'); t.update(eref, { status: 'AVAILABLE', condition: 'GOOD', conditionNote: note, updatedAt: up }); }
+      else if (cur.status === 'ISSUED') { if (ns !== 'LOST') throw Error('Return the equipment first, then mark it ' + word); if (cur.openTxId) t.update(dref('equipmentTransactions', cur.openTxId), { status: 'LOST', conditionNote: note || 'Reported lost while issued', returnedBy: S.user.uid, returnedByName: S.user.name, lostAt: up });
+        t.update(eref, { status: 'LOST', issuedTo: null, issuedToName: null, issuedAt: null, dueHours: null, openTxId: null, conditionNote: note || 'Reported lost while issued', updatedAt: up }); }
+      else t.update(eref, { status: ns, conditionNote: note, ...(ns === 'DAMAGED' ? { condition: 'DAMAGED' } : {}), updatedAt: up }); });
+    audit('EQUIPMENT_' + ns, { equipmentId: e.equipmentId, details: note, previous: { status: e.status }, new: { status: ns } }); S.pend = null; toast(`${e.equipmentId} marked ${word}`); render(); }),
   newTk: () => { S.tform = true; render(); }, cancelTk: () => { S.tform = false; render(); }, openTk: d => { S.tsel = d.id; S.msgs = null; S.ml = false; S.view = 'ticket'; render(); scrollTo(0, 0); },
   saveTk: () => run(async () => { const sub = val('t_sub'), desc = val('t_desc'); if (sub.length < 3 || desc.length < 5) return toast('Enter a subject and a description'); const d = new Date(), p = n => String(n).padStart(2, '0'), no = `${S.cid}-${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     await addDoc(collection(db, 'tickets'), { ticketNo: no, customerId: S.cid, customerName: S.cust?.name || S.cid, subject: sub, category: val('t_cat'), priority: val('t_pri'), description: desc, status: 'OPEN', createdBy: S.user.uid, createdByName: S.user.name, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
@@ -410,10 +428,10 @@ acts.xlsx = async () => { if (!need()) return; toast('Preparing Excel file…');
     banner(ws, H.length, 'EQUIPMENT HISTORY REPORT', `Generated ${stamp} (SAST) by ${S.user.name} · ${rows.length} record${rows.length === 1 ? '' : 's'}${period}${q ? ` · search: "${S.hq}"` : ''}`);
     ws.getRow(3).height = 8; head(ws, 4, H);
     rows.forEach((t, i) => { const mins = t.returnedAt?.toMillis && t.issuedAt?.toMillis ? t.returnedAt.toMillis() - t.issuedAt.toMillis() : null;
-      const r = ws.addRow([i + 1, t.equipmentId, t.equipmentName, t.category, t.employeeName, fmtFull(t.issuedAt), t.returnedAt ? fmtFull(t.returnedAt) : 'Not returned', mins === null ? 'In use' : dur(mins), t.expectedHours || '', t.conditionOut || 'GOOD', t.conditionIn || '', t.conditionNote || '', t.createdByName || '', t.returnedByName || '', t.status === 'ISSUED' ? 'ISSUED' : 'RETURNED']);
+      const r = ws.addRow([i + 1, t.equipmentId, t.equipmentName, t.category, t.employeeName, fmtFull(t.issuedAt), t.returnedAt ? fmtFull(t.returnedAt) : 'Not returned', mins === null ? 'In use' : dur(mins), t.expectedHours || '', t.conditionOut || 'GOOD', t.conditionIn || '', t.conditionNote || '', t.createdByName || '', t.returnedByName || '', t.status || 'RETURNED']);
       r.height = 22; r.eachCell({ includeEmpty: true }, (c, n) => { c.border = bd; c.font = { name: 'Calibri', size: 11 }; c.alignment = { vertical: 'middle', horizontal: [1, 6, 7, 8, 9, 10, 11, 15].includes(n) ? 'center' : 'left', wrapText: n === 12 }; if (i % 2) c.fill = fill('FFF4F6F8'); });
       [10, 11].forEach(n => { const c = r.getCell(n), m = COND[c.value]; if (m) { c.fill = fill(m[0]); c.font = { name: 'Calibri', bold: true, color: { argb: m[1] } }; } });
-      const sc = r.getCell(15); sc.font = { name: 'Calibri', bold: true, color: { argb: t.status === 'ISSUED' ? 'FF1D5FB4' : 'FF1B7F4B' } }; sc.fill = fill(t.status === 'ISSUED' ? 'FFDCEBFF' : 'FFDFF5E8'); if (t.status === 'ISSUED') r.getCell(7).font = { name: 'Calibri', italic: true, color: { argb: 'FF1D5FB4' } }; });
+      const sc = r.getCell(15); sc.font = { name: 'Calibri', bold: true, color: { argb: t.status === 'ISSUED' ? 'FF1D5FB4' : t.status === 'LOST' ? 'FFB42318' : 'FF1B7F4B' } }; sc.fill = fill(t.status === 'ISSUED' ? 'FFDCEBFF' : t.status === 'LOST' ? 'FFFBE0E0' : 'FFDFF5E8'); if (t.status === 'ISSUED') r.getCell(7).font = { name: 'Calibri', italic: true, color: { argb: 'FF1D5FB4' } }; });
     ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + Math.max(rows.length, 1), column: H.length } }; };
     rows.sort((a, b) => (a.category || 'Other').localeCompare(b.category || 'Other')); addHist('All Records', rows);
     [...new Set(rows.map(t => t.category || 'Other'))].sort().forEach(c => addHist(c.replace(/[\\/?*\[\]:]/g, '').slice(0, 31), rows.filter(t => (t.category || 'Other') === c)));
@@ -440,8 +458,10 @@ function render() { const u = S.user; $('#out').hidden = !u; const pre = !S.read
   $('#ttl').innerHTML = bn ? `${esc(bn)}<small>Digital Equipment Accountability System · Powered by Xdata</small>` : (!S.ready || (LINK && !u && !S.lbDone)) ? '' : `<img class="hdeas hs" src="${IMG_DEAS}" alt="DEAS">`;
   $('#cust').textContent = 'PLATFORM'; $('#cust').hidden = !(u && isPlat());
   const openTk = (S.tk || []).filter(t => t.status === 'OPEN').length;
-  const items = !u || S.blocked ? [] : isPlat() ? [['platform', '◈', 'Clients'], ['ptags', '⌗', 'Tags'], ['tickets', '✉', 'Tickets' + (openTk ? ` (${openTk})` : '')]] : [['home', '⌂', 'Home'], ...(staff() ? [['scan', '◉', 'Scan']] : []), ['equip', '▤', 'Equipment'], ['history', '≡', 'History'], ['insights', '▲', 'Insights'], ...(staff() ? [['tickets', '✉', 'Support']] : []), ...(isCA() ? [['admin', '⚙', 'Admin']] : [])];
-  const n = $('#nav'); n.style.display = items.length > 1 ? 'flex' : 'none'; n.innerHTML = items.map(([v, i, t]) => `<button class="${(S.view === 'ticket' ? 'tickets' : S.view) === v ? 'on' : ''}" data-act="go" data-v="${v}"><b>${i}</b>${t}</button>`).join('');
+  const items = !u || S.blocked ? [] : isPlat() ? [['platform', '◈', 'Clients'], ['ptags', '⌗', 'Tags'], ['tickets', '✉', 'Tickets' + (openTk ? ` (${openTk})` : '')]] : staff() ? [['home', '⌂', 'Home'], ['equip', '▤', 'Equipment'], ['scan', '◉', 'Scan'], ['history', '≡', 'History'], ['more', '⋯', 'More']] : [['home', '⌂', 'Home'], ['equip', '▤', 'Equipment'], ['history', '≡', 'History'], ['insights', '▲', 'Insights']];
+  const n = $('#nav'); n.style.display = items.length > 1 ? 'flex' : 'none';
+  n.innerHTML = items.map(([v, i, t]) => { const on = v === 'more' ? ['more', 'insights', 'tickets', 'ticket', 'admin'].includes(S.view) : (S.view === 'ticket' ? 'tickets' : S.view) === v;
+    return v === 'scan' && staff() ? `<button class="fab ${on ? 'on' : ''}" data-act="go" data-v="scan"><b>${i}</b><span>${t}</span></button>` : `<button class="${on ? 'on' : ''}" data-act="go" data-v="${v}"><b>${i}</b>${t}</button>`; }).join('');
   $('#ft').innerHTML = S.ready ? `<span>Powered by</span><img src="${IMG_X}" alt="Xdata"><div>DEAS · Digital Equipment Accountability System</div>` : '';
   A.innerHTML = !S.ready ? '<p class="m">Loading…</p>' : !u ? V.login() : S.blocked ? V.blocked() : (V[S.view] || V.home)(); }
 const unsub = () => { S.un.forEach(f => f()); S.un = []; };
