@@ -68,6 +68,7 @@ nav button{font-size:10px;padding:0 1px}
 nav{overflow:visible}.fab{position:relative;background:none!important;border:0;color:var(--t)!important;font-size:10px!important}
 .fab b{position:absolute;left:50%;top:-26px;transform:translateX(-50%);width:66px;height:66px;border-radius:50%;background:var(--a);color:#12181f;display:grid;place-items:center;font-size:30px!important;box-shadow:0 4px 16px rgba(0,0,0,.55);border:5px solid var(--bg)}
 .fab span{position:absolute;bottom:5px;left:0;right:0}.fab.on b{background:#fff}
+.card.FAULT{border-color:var(--OVERDUE)}.b.FAULT{background:var(--OVERDUE);color:#fff}.btn.bad{background:var(--OVERDUE);color:#fff}
 </style></head>
 <body>
 <div id="off" hidden>OFFLINE: connectivity is required to sign equipment out or in</div>
@@ -120,9 +121,9 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const fmt = t => t?.toDate ? new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(t.toDate()) : '—';
 const dur = ms => { const m = Math.floor(Math.max(0, ms) / 6e4); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
 const tms = e => e.issuedAt?.toMillis?.() ?? Date.now();
-const hrs = e => e.dueHours > 0 ? e.dueHours : e.expectedHours;
+const hrs = e => e.indefinite ? 0 : e.dueHours > 0 ? e.dueHours : e.expectedHours;
 const over = e => e.status === 'ISSUED' && hrs(e) > 0 && Date.now() - tms(e) > hrs(e) * 36e5;
-const st = e => over(e) ? 'OVERDUE' : e.status;
+const st = e => over(e) ? 'OVERDUE' : e.status === 'ISSUED' && e.lastCheckResult === 'NOT_WORKING' ? 'FAULT' : e.status;
 const badge = s => `<span class="b ${s}">${String(s).replace('_', ' ')}</span>`;
 const val = id => (document.getElementById(id)?.value ?? '').trim();
 const opt = (l, v) => l.map(c => `<option ${c === v ? 'selected' : ''}>${c}</option>`).join('');
@@ -138,7 +139,7 @@ const sorted = (a, k) => [...a].sort((x, y) => String(x[k]).localeCompare(String
 
 const card = (e, act = 'open') => { const s = st(e);
   return `<div class="card ${s}" data-act="${act}" data-id="${esc(e.id)}"><div><b>${esc(e.equipmentId)}</b>${badge(s)}${badge(e.condition || 'GOOD')}<div class="m">${esc(e.name)} · ${esc(e.category)}${e.locationName ? ' · ' + esc(e.locationName) : ''}</div>
-  ${e.status === 'ISSUED' ? `<div class="m">Issued to <b>${esc(e.issuedToName)}</b> · ${fmt(e.issuedAt)} · ${dur(Date.now() - tms(e))}</div>` : ''}
+  ${e.status === 'ISSUED' ? `<div class="m">Issued to <b>${esc(e.issuedToName)}</b> · ${fmt(e.issuedAt)} · ${e.indefinite ? 'no time limit' : dur(Date.now() - tms(e))}</div>${e.indefinite && e.lastCheckAt ? `<div class="m">Last check: ${e.lastCheckResult === 'WORKING' ? 'working' : 'NOT working'} · ${fmt(e.lastCheckAt)}</div>` : ''}` : ''}
   ${s === 'OVERDUE' ? `<div class="warn">⚠ OVERDUE by ${dur(Date.now() - tms(e) - hrs(e) * 36e5)} (allowed ${hrs(e)}h)</div>` : ''}
   ${e.conditionNote && e.condition !== 'GOOD' ? `<div class="m">Note: ${esc(e.conditionNote)}</div>` : ''}</div></div>`; };
 const rank = e => { const s = st(e); return s === 'OVERDUE' ? 0 : s === 'ISSUED' ? 1 : 2; };
@@ -189,16 +190,16 @@ const V = {
     <div class="panel"><label>ENTER EQUIPMENT ID</label><input id="eid" placeholder="RAD-00125" autocapitalize="characters"><button class="btn ghost" data-act="find">FIND EQUIPMENT</button></div>`,
   item() { const e = S.eq.find(x => x.id === S.sel); if (!e) return V.home(); const s = st(e), p = S.pend; let a = '';
     if (staff()) {
-      if (e.status === 'AVAILABLE') a = p ? `<div class="panel"><dl class="kv"><dt>EQUIPMENT</dt><dd>${esc(e.name)}</dd><dt>EMPLOYEE</dt><dd>${esc(p.name)}</dd><dt>LOCATION</dt><dd>${esc(e.locationName || '—')}</dd><dt>CONDITION OUT</dt><dd>${p.cond}</dd><dt>ACTION</dt><dd>SIGN OUT</dd><dt>DUE BACK AFTER</dt><dd>${p.hrs}h</dd><dt>TIME</dt><dd>Set by server</dd></dl></div><div class="row"><button class="btn ghost" data-act="cancel">CANCEL</button><button class="btn" data-act="doSign">CONFIRM SIGN OUT</button></div>`
+      if (e.status === 'AVAILABLE') a = p ? `<div class="panel"><dl class="kv"><dt>EQUIPMENT</dt><dd>${esc(e.name)}</dd><dt>EMPLOYEE</dt><dd>${esc(p.name)}</dd><dt>LOCATION</dt><dd>${esc(e.locationName || '—')}</dd><dt>CONDITION OUT</dt><dd>${p.cond}</dd><dt>ACTION</dt><dd>SIGN OUT</dd><dt>DUE BACK AFTER</dt><dd>${p.ind ? 'No time limit' : p.hrs + 'h'}</dd><dt>TIME</dt><dd>Set by server</dd></dl></div><div class="row"><button class="btn ghost" data-act="cancel">CANCEL</button><button class="btn" data-act="doSign">CONFIRM SIGN OUT</button></div>`
         : `<div class="panel"><label>EMPLOYEE (select or type)</label><input id="pname" list="emps" placeholder="Employee name" autocomplete="off"><datalist id="emps">${S.emp.filter(x => x.active).map(x => `<option value="${esc(x.name)}">`).join('')}</datalist>
-        <label>HOURS OUT (due back after)</label><input id="phrs" type="number" inputmode="decimal" min="0.5" step="0.5" value="${e.expectedHours || ''}" placeholder="e.g. 8"><label>CONDITION OUT</label><select id="cout">${opt(CONDS, e.condition || 'GOOD')}</select><button class="btn" data-act="review">SIGN OUT</button></div>`;
+        <label class="chk"><input type="checkbox" id="pind" ${e.defaultIndefinite ? 'checked' : ''}> No time limit (stays out until returned)</label><label>HOURS OUT (due back after)</label><input id="phrs" type="number" inputmode="decimal" min="0.5" step="0.5" value="${e.expectedHours || ''}" placeholder="e.g. 8"><label>CONDITION OUT</label><select id="cout">${opt(CONDS, e.condition || 'GOOD')}</select><button class="btn" data-act="review">SIGN OUT</button></div>`;
       else if (e.status === 'ISSUED') a = p ? `<div class="panel"><dl class="kv"><dt>EQUIPMENT</dt><dd>${esc(e.name)}</dd><dt>FROM</dt><dd>${esc(e.issuedToName)}</dd><dt>CONDITION IN</dt><dd>${p.cond}</dd>${p.note ? `<dt>NOTE</dt><dd>${esc(p.note)}</dd>` : ''}</dl></div><div class="row"><button class="btn ghost" data-act="cancel">CANCEL</button><button class="btn" data-act="doReturn">CONFIRM RETURN</button></div>`
         : `<div class="panel"><label>CONDITION IN</label><select id="cond">${CONDS.map(c => `<option>${c}</option>`).join('')}</select><label>NOTE (optional)</label><input id="cnote" placeholder="e.g. cracked screen"><button class="btn" data-act="askReturn">RETURN EQUIPMENT</button></div>`;
       else a = `<p class="warn">${s} equipment cannot be signed out.</p>`;
     }
     return `<h2>${esc(e.equipmentId)} ${badge(s)}</h2><div class="panel"><dl class="kv"><dt>Name</dt><dd>${esc(e.name)}</dd><dt>Category</dt><dd>${esc(e.category)}</dd><dt>Location</dt><dd>${esc(e.locationName || '—')}</dd><dt>Condition</dt><dd>${badge(e.condition || 'GOOD')} ${esc(e.conditionNote)}</dd>
     ${e.status === 'ISSUED' ? `<dt>Issued to</dt><dd>${esc(e.issuedToName)}</dd><dt>Issued</dt><dd>${fmt(e.issuedAt)}</dd><dt>Duration</dt><dd>${dur(Date.now() - tms(e))}</dd>` : ''}
-    ${s === 'OVERDUE' ? `<dt>Overdue</dt><dd class="warn">⚠ ${dur(Date.now() - tms(e) - hrs(e) * 36e5)}</dd>` : ''}</dl></div>${a}${staff() ? statusPanel(e) : ''}`; },
+    ${s === 'OVERDUE' ? `<dt>Overdue</dt><dd class="warn">⚠ ${dur(Date.now() - tms(e) - hrs(e) * 36e5)}</dd>` : ''}</dl></div>${staff() && e.indefinite && e.status === 'ISSUED' && !p ? checkPanel(e) : ''}${a}${staff() ? statusPanel(e) : ''}`; },
   history() { if (!S.tx) { loadTx(); return '<p class="m">Loading…</p>'; }
     return `<h2>History</h2><input id="hq" type="search" placeholder="Equipment, category or employee" value="${esc(S.hq)}">${staff() ? (S.xo ? xpanel() : '<button class="btn" data-act="xlsxPanel">EXPORT TO EXCEL</button>') : ''}<div id="txl">${txHTML()}</div>`; },
   admin() { if (!isCA()) return V.home(); const T = { eq: ['Equipment', adminEq], emp: ['Employees', adminEmp], loc: ['Locations', adminLoc], usr: ['Users', adminUsr], brand: ['Branding', adminBrand] };
@@ -213,7 +214,7 @@ function adminEq() { const x = S.edit || {}, cat = x.category || '', custom = ca
   <label>Name</label><input id="f_name" value="${esc(x.name)}"><label>Category</label><select id="f_cat">${opt(cats(), cat)}<option value="__c" ${custom ? 'selected' : ''}>Custom…</option></select><input id="f_ccat" placeholder="Custom category" value="${custom ? esc(cat) : ''}">
   <label>Serial number</label><input id="f_ser" value="${esc(x.serialNumber)}"><label>NFC ID</label><input id="f_nfc" value="${esc(x.nfcId)}" placeholder="04:A7:23:…"><button class="btn ghost" data-act="regScan" ${nfcSupported ? '' : 'disabled'}>SCAN NFC TAG</button>
   <label>Location</label><select id="f_loc"><option value="">—</option>${S.loc.filter(l => l.active || l.id === x.locationId).map(l => `<option value="${esc(l.id)}" ${l.id === x.locationId ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>
-  <label>Default hours out (suggested at sign-out)</label><input id="f_hrs" type="number" min="0" value="${x.expectedHours || ''}"><label>Condition</label><select id="f_cond">${opt(CONDS, x.condition || 'GOOD')}</select>
+  <label class="chk"><input type="checkbox" id="f_indef" ${x.defaultIndefinite ? 'checked' : ''}> Usually out indefinitely (e.g. DB box)</label><label>Default hours out (suggested at sign-out)</label><input id="f_hrs" type="number" min="0" value="${x.expectedHours || ''}"><label>Condition</label><select id="f_cond">${opt(CONDS, x.condition || 'GOOD')}</select>
   <label>Status</label><select id="f_stat" ${x.status === 'ISSUED' ? 'disabled' : ''}>${opt(['AVAILABLE', 'MAINTENANCE', 'LOST', 'DAMAGED', 'RETIRED'], x.status)}${x.status === 'ISSUED' ? '<option selected>ISSUED</option>' : ''}</select>
   <button class="btn" data-act="saveEq">SAVE EQUIPMENT</button>${x.equipmentId ? '<button class="btn ghost" data-act="newEq">NEW</button><button class="btn ghost" style="color:#ff8080" data-act="delEq">DELETE EQUIPMENT</button>' : ''}</div>${sorted(S.eq, 'equipmentId').map(e => card(e, 'editEq')).join('')}`; }
 function adminEmp() { const x = S.edit || {};
@@ -236,7 +237,7 @@ const custCard = c => { const open = S.xc === c.customerId;
   return `<div class="card ${c.status} cx" data-act="xpand" data-id="${esc(c.customerId)}"><div style="width:100%"><div class="ch"><b>${esc(c.name)}</b><span>${open ? '▴' : '▾'}</span></div>${badge(c.status)}<div class="m">ID ${esc(c.customerId)} · Plan ${esc(c.sub.plan || c.plan)}</div><div class="m">Users ${c.users}/${c.sub.userLimit ?? '∞'} · Equipment ${c.equip}/${c.sub.equipmentLimit ?? '∞'} · Tags ${c.tags ?? 0} · Issued ${c.issued}</div></div></div>${open ? custDetail(c) : ''}`; };
 
 // ---------- dashboard helpers & tickets ----------
-const ORD = ['OVERDUE', 'DAMAGED', 'LOST', 'MAINTENANCE'];
+const ORD = ['OVERDUE', 'FAULT', 'DAMAGED', 'LOST', 'MAINTENANCE'];
 const attention = a => { const l = a.filter(e => ORD.includes(st(e))).sort((x, y) => ORD.indexOf(st(x)) - ORD.indexOf(st(y)));
   return '<div class="sec">NEEDS ATTENTION</div>' + (l.length ? l.slice(0, 5).map(e => card(e)).join('') + (l.length > 5 ? `<button class="btn ghost" data-act="go" data-v="equip">VIEW ALL (${l.length})</button>` : '') : '<div class="okbox">✓ Nothing overdue or unavailable</div>'); };
 const catTable = a => { const cs = [...new Set(a.map(e => e.category || 'Other'))].sort(); if (!cs.length) return '';
@@ -273,6 +274,7 @@ function insData() { const days = +S.insR, now = Date.now(), since = days ? now 
     else if (ex && t.status !== 'LOST' && now - (t.issuedAt?.toMillis?.() ?? now) > ex) { over++; p.still++; p.lateMs += now - t.issuedAt.toMillis() - ex; } });
   return { l, P, E, C, K, ret, late, avg: ret ? sum / ret : 0, dmg, over, onTime: ret ? Math.round((ret - late) / ret * 100) : 100 }; }
 
+const checkPanel = e => `<div class="panel"><label>IS THIS EQUIPMENT WORKING?</label>${e.lastCheckAt ? `<p class="m">Last check: ${e.lastCheckResult === 'WORKING' ? 'Working' : 'NOT working'} · ${fmt(e.lastCheckAt)} · ${esc(e.lastCheckBy)}</p>` : ''}<input id="cknote" placeholder="Note (recommended if not working)"><div class="row"><button class="btn" data-act="doCheck" data-s="WORKING">✓ WORKING</button><button class="btn bad" data-act="doCheck" data-s="NOT_WORKING">✗ NOT WORKING</button></div></div>`;
 const statusPanel = e => { if (e.status === 'RETIRED') return ''; const b = (st2, t) => `<button class="btn ghost" data-act="setSt" data-s="${st2}">${t}</button>`;
   return `<div class="panel"><label>REPORT OR CHANGE STATUS</label><input id="snote" placeholder="Reason or note (optional)">${e.status === 'ISSUED' ? `<p class="m">Issued equipment can only be reported lost. To mark it broken or in maintenance, return it first.</p>${b('LOST', 'REPORT LOST')}`
     : `<div class="row">${b('MAINTENANCE', 'MAINTENANCE')}${b('DAMAGED', 'BROKEN')}</div>${b('LOST', 'LOST')}${e.status !== 'AVAILABLE' ? b('AVAILABLE', 'BACK IN SERVICE') : ''}`}</div>`; };
@@ -288,7 +290,7 @@ function adminBrand() { const b = S.brand || {};
 
 // ---------- data loaders ----------
 const txCard = t => `<div class="card ${t.status}"><div><b>${esc(t.equipmentId)}</b> ${badge(t.status)}${t.conditionIn ? badge(t.conditionIn) : ''}<div>${esc(t.employeeName)}</div><div class="m">OUT: ${fmt(t.issuedAt)} · IN: ${fmt(t.returnedAt)}</div>
-  <div class="m">Duration: ${dur((t.returnedAt?.toMillis?.() ?? t.lostAt?.toMillis?.() ?? Date.now()) - (t.issuedAt?.toMillis?.() ?? Date.now()))}${t.expectedHours ? ' of ' + t.expectedHours + 'h allowed' : ''} · ${esc(t.createdByName)}${t.returnedByName ? ' / ' + esc(t.returnedByName) : ''}</div>${t.conditionNote ? `<div class="m">Note: ${esc(t.conditionNote)}</div>` : ''}</div></div>`;
+  <div class="m">Duration: ${dur((t.returnedAt?.toMillis?.() ?? t.lostAt?.toMillis?.() ?? Date.now()) - (t.issuedAt?.toMillis?.() ?? Date.now()))}${t.indefinite ? ' · no time limit' : t.expectedHours ? ' of ' + t.expectedHours + 'h allowed' : ''} · ${esc(t.createdByName)}${t.returnedByName ? ' / ' + esc(t.returnedByName) : ''}</div>${t.conditionNote ? `<div class="m">Note: ${esc(t.conditionNote)}</div>` : ''}</div></div>`;
 const txHTML = () => { const q = S.hq.toLowerCase(), l = (S.tx || []).filter(t => !q || `${t.equipmentId} ${t.equipmentName} ${t.employeeName} ${t.category}`.toLowerCase().includes(q)); if (!l.length) return '<p class="m">No transactions.</p>';
   const g = {}; l.forEach(t => (g[t.category || 'Other'] ||= []).push(t)); return Object.keys(g).sort().map(c => `<div class="grp">${esc(c)}<span>${g[c].length} record${g[c].length === 1 ? '' : 's'}</span></div>` + g[c].map(txCard).join('')).join(''); };
 async function loadTx() { try { S.tx = (await getDocs(query(col('equipmentTransactions'), orderBy('createdAt', 'desc'), limit(300)))).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { S.tx = []; toast(e.message); } render(); }
@@ -302,13 +304,13 @@ async function loadPlat() { try { const cs = (await getDocs(collection(db, 'cust
 // ---------- transactions ----------
 async function signOutEq(e, p) { const eref = dref('equipment', e.id), tref = doc(col('equipmentTransactions'));
   await runTransaction(db, async t => { const d = (await t.get(eref)).data(); if (d.status !== 'AVAILABLE') throw Error('Equipment is no longer available');
-    t.set(tref, { transactionId: tref.id, customerId: S.cid, equipmentId: d.equipmentId, equipmentName: d.name, category: d.category, employeeId: p.employeeId, employeeName: p.name, action: 'SIGN_OUT', issuedAt: serverTimestamp(), returnedAt: null, status: 'ISSUED', conditionOut: p.cond, locationId: d.locationId || '', locationName: d.locationName || '', expectedHours: p.hrs, createdBy: S.user.uid, createdByName: S.user.name, createdAt: serverTimestamp() });
-    t.update(eref, { status: 'ISSUED', issuedTo: p.employeeId, issuedToName: p.name, issuedAt: serverTimestamp(), dueHours: p.hrs, openTxId: tref.id, condition: p.cond, updatedAt: serverTimestamp() }); });
+    t.set(tref, { transactionId: tref.id, customerId: S.cid, equipmentId: d.equipmentId, equipmentName: d.name, category: d.category, employeeId: p.employeeId, employeeName: p.name, action: 'SIGN_OUT', issuedAt: serverTimestamp(), returnedAt: null, status: 'ISSUED', conditionOut: p.cond, locationId: d.locationId || '', locationName: d.locationName || '', expectedHours: p.hrs, indefinite: !!p.ind, createdBy: S.user.uid, createdByName: S.user.name, createdAt: serverTimestamp() });
+    t.update(eref, { status: 'ISSUED', issuedTo: p.employeeId, issuedToName: p.name, issuedAt: serverTimestamp(), dueHours: p.hrs, indefinite: !!p.ind, openTxId: tref.id, condition: p.cond, updatedAt: serverTimestamp() }); });
   audit('EQUIPMENT_ISSUED', { equipmentId: e.equipmentId, employeeId: p.employeeId, details: p.name }); }
 async function returnEq(e, cond, note) { const eref = dref('equipment', e.id);
   await runTransaction(db, async t => { const d = (await t.get(eref)).data(); if (d.status !== 'ISSUED') throw Error('Equipment is not issued');
     if (d.openTxId) t.update(dref('equipmentTransactions', d.openTxId), { returnedAt: serverTimestamp(), status: 'RETURNED', conditionIn: cond, conditionNote: note, returnedBy: S.user.uid, returnedByName: S.user.name });
-    t.update(eref, { status: cond === 'DAMAGED' ? 'DAMAGED' : 'AVAILABLE', issuedTo: null, issuedToName: null, issuedAt: null, dueHours: null, openTxId: null, condition: cond, conditionNote: note, lastReturnedAt: serverTimestamp(), updatedAt: serverTimestamp() }); });
+    t.update(eref, { status: cond === 'DAMAGED' ? 'DAMAGED' : 'AVAILABLE', issuedTo: null, issuedToName: null, issuedAt: null, dueHours: null, indefinite: null, lastCheckAt: null, lastCheckResult: null, lastCheckBy: null, openTxId: null, condition: cond, conditionNote: note, lastReturnedAt: serverTimestamp(), updatedAt: serverTimestamp() }); });
   audit('EQUIPMENT_RETURNED', { equipmentId: e.equipmentId, employeeId: e.issuedTo, details: `${e.issuedToName} · ${cond}${note ? ' · ' + note : ''}` }); }
 async function createUser(cid, role, name, email, pw, used, limit) { if (!name || !email || pw.length < 6) throw Error('Name, email and a password of at least 6 characters are required'); if (limit && used >= limit) throw Error(`User limit reached (${limit}). Contact Xdata to upgrade.`);
   const sec = initializeApp(firebaseConfig, 'sec' + Date.now()), a = getAuth(sec); let uid;
@@ -326,8 +328,8 @@ const acts = {
   nfc: async () => { if (S.scanning) return; S.ctl = new AbortController(); S.scanning = true; render();
     try { await scanNfc(tag => { if (!tag) return toast('Could not read tag'); S.ctl.abort(); S.scanning = false; const e = S.eq.find(x => tag.uid && x.nfcId === tag.uid) || S.eq.find(x => tag.text && x.id === tag.text.trim().toUpperCase());
       if (!e) { toast('Tag not registered to any equipment'); return render(); } acts.open({ id: e.id }); }, S.ctl.signal); } catch (e) { S.scanning = false; toast('NFC error: ' + e.message); render(); } },
-  review: () => { const n = val('pname'), h = +val('phrs'); if (n.length < 2) return toast('Select or enter the employee'); if (!(h > 0)) return toast('Enter how many hours it will be out');
-    const m = S.emp.find(x => x.active && x.name.toLowerCase() === n.toLowerCase()); S.pend = { employeeId: m ? m.id : 'MANUAL', name: m ? m.name : n, hrs: h, cond: val('cout') }; render(); },
+  review: () => { const n = val('pname'), h = +val('phrs'); if (n.length < 2) return toast('Select or enter the employee'); const ind = !!$('#pind')?.checked; if (!ind && !(h > 0)) return toast('Enter how many hours it will be out, or tick No time limit');
+    const m = S.emp.find(x => x.active && x.name.toLowerCase() === n.toLowerCase()); S.pend = { employeeId: m ? m.id : 'MANUAL', name: m ? m.name : n, hrs: ind ? 0 : h, ind, cond: val('cout') }; render(); },
   doSign: () => run(async () => { await signOutEq(S.eq.find(x => x.id === S.sel), S.pend); toast('Equipment signed out'); loadRecent(); go('home'); }),
   askReturn: () => { S.pend = { cond: val('cond'), note: val('cnote') }; render(); },
   doReturn: () => run(async () => { await returnEq(S.eq.find(x => x.id === S.sel), S.pend.cond, S.pend.note); toast(S.pend.cond === 'DAMAGED' ? 'Returned. Flagged DAMAGED, not available for sign-out' : 'Equipment returned'); loadRecent(); go('home'); }),
@@ -337,7 +339,7 @@ const acts = {
   saveEq: () => run(async () => { const eid = val('f_id').toUpperCase().replace(/[\/\s]/g, ''), nfc = val('f_nfc').toUpperCase().replace(/\//g, ''); if (!eid || !val('f_name')) return toast('ID and name are required'); const ex = S.eq.find(x => x.id === eid);
     if (!ex && S.sub.equipmentLimit && S.eq.length >= S.sub.equipmentLimit) return toast(`Equipment limit reached (${S.sub.equipmentLimit}). Contact Xdata to upgrade.`);
     const cat = val('f_cat') === '__c' ? val('f_ccat') : val('f_cat'), l = S.loc.find(x => x.id === val('f_loc'));
-    const d = { customerId: S.cid, equipmentId: eid, name: val('f_name'), category: cat || 'Other', nfcId: nfc, serialNumber: val('f_ser'), locationId: l?.id || '', locationName: l?.name || '', expectedHours: +val('f_hrs') || PRESET[cat] || 0, condition: val('f_cond'), updatedAt: serverTimestamp() };
+    const d = { customerId: S.cid, equipmentId: eid, name: val('f_name'), category: cat || 'Other', nfcId: nfc, serialNumber: val('f_ser'), locationId: l?.id || '', locationName: l?.name || '', expectedHours: +val('f_hrs') || PRESET[cat] || 0, condition: val('f_cond'), defaultIndefinite: !!$('#f_indef')?.checked, updatedAt: serverTimestamp() };
     if (!ex) Object.assign(d, { status: val('f_stat'), createdAt: serverTimestamp(), issuedTo: null, issuedToName: null, issuedAt: null, openTxId: null, dueHours: null, conditionNote: '' }); else if (ex.status !== 'ISSUED') d.status = val('f_stat');
     await runTransaction(db, async t => { let tref = null, fresh = false; if (nfc) { tref = dref('nfcTags', nfc); const ts = await t.get(tref); if (ts.exists() && ts.data().equipmentId !== eid) throw Error(`NFC TAG ALREADY REGISTERED to ${ts.data().equipmentId}`); fresh = !ts.exists(); }
       t.set(dref('equipment', eid), d, { merge: true }); if (tref && fresh) t.set(tref, { customerId: S.cid, nfcId: nfc, equipmentId: eid, createdAt: serverTimestamp() }); if (ex?.nfcId && ex.nfcId !== nfc) t.delete(dref('nfcTags', ex.nfcId)); });
@@ -367,12 +369,17 @@ const acts = {
     plog('SUBSCRIPTION_CHANGED', c.customerId, `${plan} · ${status} · users ${ul} · equipment ${el} · ${cs.length} categories`); S.plat = null; toast('Saved'); render(); }),
   togUsr: d => run(async () => { const u = S.xu.find(x => x.uid === d.id); await setDoc(doc(db, 'users', u.uid), { active: u.active === false }, { merge: true }); plog(u.active === false ? 'USER_ENABLED' : 'USER_DISABLED', S.xc, u.email); S.xu = null; render(); loadXU(S.xc); }),
   xtag: d => { S.xt.has(d.id) ? S.xt.delete(d.id) : S.xt.add(d.id); $('#ptl').innerHTML = ptHTML(); }, refIns: () => { S.ins = null; render(); },
+  doCheck: d => run(async () => { const e = S.eq.find(x => x.id === S.sel), ok = d.s === 'WORKING', note = val('cknote'); if (!ok && !note && !confirm('Report NOT WORKING without a note?')) return; const eref = dref('equipment', e.id), cref = doc(col('equipmentChecks'));
+    await runTransaction(db, async t => { const cur = (await t.get(eref)).data(); if (cur.status !== 'ISSUED') throw Error('This equipment is no longer issued');
+      t.set(cref, { checkId: cref.id, customerId: S.cid, equipmentId: e.equipmentId, equipmentName: e.name, category: e.category, txId: cur.openTxId || '', holder: cur.issuedToName || '', result: d.s, note, checkedBy: S.user.uid, checkedByName: S.user.name, createdAt: serverTimestamp() });
+      t.update(eref, { lastCheckAt: serverTimestamp(), lastCheckResult: d.s, lastCheckBy: S.user.name, condition: ok ? 'GOOD' : 'DAMAGED', conditionNote: note, updatedAt: serverTimestamp() }); });
+    audit(ok ? 'EQUIPMENT_CHECK_WORKING' : 'EQUIPMENT_CHECK_NOT_WORKING', { equipmentId: e.equipmentId, details: note }); toast(ok ? 'Recorded: working' : 'Recorded: NOT working. Flagged for attention'); render(); }),
   setSt: d => run(async () => { const e = S.eq.find(x => x.id === S.sel), ns = d.s, note = val('snote'), word = { AVAILABLE: 'back in service', MAINTENANCE: 'in maintenance', DAMAGED: 'broken (damaged)', LOST: 'lost' }[ns];
     if (!confirm(`Mark ${e.equipmentId} as ${word}?`)) return; const eref = dref('equipment', e.id);
     await runTransaction(db, async t => { const cur = (await t.get(eref)).data(), up = serverTimestamp();
       if (ns === 'AVAILABLE') { if (['ISSUED', 'AVAILABLE'].includes(cur.status)) throw Error('Nothing to restore'); t.update(eref, { status: 'AVAILABLE', condition: 'GOOD', conditionNote: note, updatedAt: up }); }
       else if (cur.status === 'ISSUED') { if (ns !== 'LOST') throw Error('Return the equipment first, then mark it ' + word); if (cur.openTxId) t.update(dref('equipmentTransactions', cur.openTxId), { status: 'LOST', conditionNote: note || 'Reported lost while issued', returnedBy: S.user.uid, returnedByName: S.user.name, lostAt: up });
-        t.update(eref, { status: 'LOST', issuedTo: null, issuedToName: null, issuedAt: null, dueHours: null, openTxId: null, conditionNote: note || 'Reported lost while issued', updatedAt: up }); }
+        t.update(eref, { status: 'LOST', issuedTo: null, issuedToName: null, issuedAt: null, dueHours: null, indefinite: null, lastCheckAt: null, lastCheckResult: null, lastCheckBy: null, openTxId: null, conditionNote: note || 'Reported lost while issued', updatedAt: up }); }
       else t.update(eref, { status: ns, conditionNote: note, ...(ns === 'DAMAGED' ? { condition: 'DAMAGED' } : {}), updatedAt: up }); });
     audit('EQUIPMENT_' + ns, { equipmentId: e.equipmentId, details: note, previous: { status: e.status }, new: { status: ns } }); S.pend = null; toast(`${e.equipmentId} marked ${word}`); render(); }),
   newTk: () => { S.tform = true; render(); }, cancelTk: () => { S.tform = false; render(); }, openTk: d => { S.tsel = d.id; S.msgs = null; S.ml = false; S.view = 'ticket'; render(); scrollTo(0, 0); },
